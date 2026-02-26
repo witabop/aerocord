@@ -1,0 +1,135 @@
+.login-window {
+  background: linear-gradient(to bottom,
+    rgba(210, 228, 250, 0.97) 0%,
+    rgba(185, 210, 240, 0.97) 60px,
+    rgba(230, 238, 248, 0.98) 60px,
+    rgba(245, 248, 252, 0.99) 100%
+  );
+}
+
+.login-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 20px 30px;
+  overflow-y: auto;
+}
+
+.login-header {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.login-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.login-icon {
+  font-size: 32px;
+}
+
+.login-logo h1 {
+  font-size: 22px;
+  font-weight: 600;
+  color: #1a3a5c;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.login-subtitle {
+  font-size: 11px;
+  color: #5a7a9a;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.form-group label {
+  font-size: 11px;
+  color: #3a5a7a;
+  font-weight: 600;
+}
+
+.checkbox-group label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 400;
+  cursor: pointer;
+  flex-direction: row;
+}
+
+.checkbox-group input[type="checkbox"] {
+  margin: 0;
+}
+
+.sign-in-btn {
+  align-self: center;
+  padding: 6px 40px;
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+.login-error {
+  padding: 8px 12px;
+  background: #fde8e8;
+  border: 1px solid #e8a0a0;
+  border-radius: 3px;
+  color: #a03030;
+  font-size: 11px;
+  text-align: center;
+}
+
+.login-connecting {
+  padding: 8px 12px;
+  background: #e8f0fa;
+  border: 1px solid #a0c0e0;
+  border-radius: 3px;
+  color: #2a5a8a;
+  font-size: 11px;
+  text-align: center;
+}
+
+.login-footer {
+  margin-top: auto;
+  padding-top: 16px;
+  text-align: center;
+}
+
+.login-warning {
+  font-size: 9px;
+  color: #8a8a8a;
+  line-height: 1.4;
+}
+
+.dropdown-arrow {
+  font-size: 8px;
+  margin-left: 4px;
+}
+
+.wlm-dropdown {
+  position: relative;
+}
+
+.wlm-dropdown-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: white;
+  border: 1px solid #a0b8d0;
+  box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.15);
+  z-index: 100;
+}

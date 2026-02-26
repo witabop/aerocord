@@ -1,0 +1,139 @@
+@import url('../shared/styles/global.css');
+
+@keyframes notification-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes notification-slide-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+}
+
+.notification-window {
+  width: 100%;
+  height: 100%;
+  border-radius: 6px;
+  overflow: hidden;
+  cursor: pointer;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--notif-scene-color, #3bb2ea) 40%, white 60%),
+    color-mix(in srgb, var(--notif-scene-color, #3bb2ea) 25%, white 75%)
+  );
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  animation: notification-slide-in 0.35s ease-out forwards;
+}
+
+.notification-window.notification-closing {
+  animation: notification-slide-out 0.3s ease-in forwards;
+}
+
+.notif-scene-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.25;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.notification-header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px 0;
+  position: relative;
+  z-index: 1;
+}
+
+.notification-logo {
+  width: 16px;
+  height: 16px;
+  image-rendering: auto;
+}
+
+.notification-header-text {
+  font-size: 11px;
+  font-weight: 400;
+  color: #1a3a5a;
+  opacity: 0.8;
+}
+
+.notification-close {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  background: none;
+  border: none;
+  color: #555;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 2px 5px;
+  z-index: 2;
+  border-radius: 3px;
+}
+
+.notification-close:hover {
+  background: rgba(0, 0, 0, 0.1);
+  color: #c03030;
+}
+
+.notification-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  flex: 1;
+  position: relative;
+  z-index: 1;
+}
+
+.notification-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.notification-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #1a2a3a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notification-subtitle {
+  font-size: 11px;
+  color: #3a5a3a;
+  margin-top: 2px;
+}
+
+.notification-body {
+  font-size: 11px;
+  color: #3a4a5a;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

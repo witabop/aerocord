@@ -1,0 +1,102 @@
+.profile-popup-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  background: transparent;
+}
+
+.profile-popup {
+  position: absolute;
+  width: 260px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+  z-index: 901;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--profile-accent, #5865F2) 40%, white 60%),
+    color-mix(in srgb, var(--profile-accent, #5865F2) 20%, white 80%)
+  );
+}
+
+.profile-popup-scene-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.2;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.profile-popup-avatar-area {
+  display: flex;
+  justify-content: center;
+  padding-top: 16px;
+  position: relative;
+  z-index: 1;
+}
+
+.profile-popup-body {
+  padding: 8px 16px 16px;
+  text-align: center;
+  position: relative;
+  z-index: 1;
+}
+
+.profile-popup-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1a2a3a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-popup-username {
+  font-size: 11px;
+  color: #4a5a6a;
+  margin-top: 1px;
+}
+
+.profile-popup-custom-status {
+  font-size: 11px;
+  color: #3a5a3a;
+  margin-top: 4px;
+  font-style: italic;
+}
+
+.profile-popup-divider {
+  height: 1px;
+  background: rgba(0, 0, 0, 0.1);
+  margin: 8px 0;
+}
+
+.profile-popup-section-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #1a2a3a;
+  letter-spacing: 0.3px;
+  margin-bottom: 4px;
+  text-align: left;
+}
+
+.profile-popup-bio {
+  font-size: 12px;
+  color: #2a3a4a;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+  text-align: left;
+}
+
+.profile-popup-loading {
+  padding: 30px;
+  text-align: center;
+  font-size: 12px;
+  color: #6a7a8a;
+}

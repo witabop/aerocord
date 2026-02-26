@@ -1,0 +1,93 @@
+.settings-window {
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6a7a8a;
+}
+
+.settings-body {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.settings-sidebar {
+  width: 130px;
+  background: #f0f4f8;
+  border-right: 1px solid #c8d8e8;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+
+.settings-sidebar-item {
+  padding: 8px 12px;
+  font-size: 11px;
+  color: #3a5a7a;
+  cursor: pointer;
+  border-bottom: 1px solid #e0e8f0;
+}
+
+.settings-sidebar-item:hover {
+  background: #e0eaf4;
+}
+
+.settings-sidebar-item.active {
+  background: #d0e0f0;
+  font-weight: 600;
+}
+
+.settings-content {
+  flex: 1;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.settings-category-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #2a4a6a;
+  margin-bottom: 14px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #d0dce8;
+}
+
+.settings-row {
+  margin-bottom: 10px;
+}
+
+.settings-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 3px 0;
+}
+
+.settings-checkbox-label input[type="checkbox"] {
+  margin: 0;
+}
+
+.settings-number-row,
+.settings-select-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 11px;
+}
+
+.settings-number-input {
+  width: 60px;
+  text-align: center;
+}
+
+.settings-select {
+  width: 120px;
+}

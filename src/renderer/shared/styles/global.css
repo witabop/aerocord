@@ -1,0 +1,249 @@
+@import url('https://fonts.googleapis.com/css2?family=Segoe+UI:wght@300;400;600;700&display=swap');
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  --wlm-blue: #3a6ea5;
+  --wlm-blue-light: #5b9bd5;
+  --wlm-blue-dark: #2a5a8c;
+  --wlm-gradient-top: #d4e4f7;
+  --wlm-gradient-bottom: #b8cfe5;
+  --wlm-border: #7eb4ea;
+  --wlm-border-dark: #5a8bbf;
+  --wlm-text: #1a1a1a;
+  --wlm-text-light: #4a4a4a;
+  --wlm-text-white: #ffffff;
+  --wlm-bg-white: #ffffff;
+  --wlm-bg-light: #f0f4f8;
+  --wlm-separator: #c0d3e8;
+  --wlm-input-bg: #ffffff;
+  --wlm-input-border: #7eb4ea;
+  --wlm-button-bg: linear-gradient(to bottom, #f0f4f8, #d8e4f0);
+  --wlm-button-hover: linear-gradient(to bottom, #e8eef5, #c8d8e8);
+  --wlm-button-active: linear-gradient(to bottom, #c0d0e2, #a0b8d0);
+  --wlm-green-online: #6bb700;
+  --wlm-yellow-idle: #f0a30a;
+  --wlm-red-dnd: #e03e3e;
+  --wlm-gray-offline: #747f8d;
+  --wlm-toolbar-bg: linear-gradient(to bottom, #e8f0fa, #c0d4ea);
+  --wlm-toolbar-border: #88aed0;
+  --scene-color: #3a6ea5;
+  --scene-text-color: #ffffff;
+  --scene-shadow-color: #000000;
+}
+
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-size: 12px;
+  color: var(--wlm-text);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+body {
+  background: transparent;
+}
+
+::-webkit-scrollbar {
+  width: 17px;
+  height: 17px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f0f0f0;
+  border-left: 1px solid #e0e0e0;
+}
+
+::-webkit-scrollbar-thumb:vertical {
+  background:
+    url('aerocord-asset:///images/scrollbar/VertThumbGripperInactive.png') center no-repeat,
+    url('aerocord-asset:///images/TopBarBg.png') no-repeat center / 100% 100%,
+    linear-gradient(to right, #efefef, #e4e4e4 40%, #d8d8d8);
+  border: 1px solid #acacac;
+  border-radius: 0;
+  min-height: 28px;
+}
+
+::-webkit-scrollbar-thumb:vertical:hover {
+  background:
+    url('aerocord-asset:///images/scrollbar/VertThumbGripperHover.png') center no-repeat,
+    url('aerocord-asset:///images/TopBarBg.png') no-repeat center / 100% 100%,
+    linear-gradient(to right, #d4e8f8, #b8d4ee 40%, #9cc0e4);
+  border-color: #6ea4cd;
+}
+
+::-webkit-scrollbar-thumb:vertical:active {
+  background:
+    url('aerocord-asset:///images/scrollbar/VertThumbGripperActive.png') center no-repeat,
+    url('aerocord-asset:///images/TopBarBg.png') no-repeat center / 100% 100%,
+    linear-gradient(to right, #a8c8e0, #90b4d4 40%, #78a0c8);
+  border-color: #5888b0;
+}
+
+::-webkit-scrollbar-thumb:horizontal {
+  background:
+    url('aerocord-asset:///images/scrollbar/HorzThumbGripperInactive.png') center no-repeat,
+    url('aerocord-asset:///images/TopBarBg.png') no-repeat center / 100% 100%,
+    linear-gradient(to bottom, #efefef, #e4e4e4 40%, #d8d8d8);
+  border: 1px solid #acacac;
+  min-width: 28px;
+}
+
+::-webkit-scrollbar-thumb:horizontal:hover {
+  background:
+    url('aerocord-asset:///images/scrollbar/HorzThumbGripperHover.png') center no-repeat,
+    url('aerocord-asset:///images/TopBarBg.png') no-repeat center / 100% 100%,
+    linear-gradient(to bottom, #d4e8f8, #b8d4ee 40%, #9cc0e4);
+  border-color: #6ea4cd;
+}
+
+::-webkit-scrollbar-thumb:horizontal:active {
+  background:
+    url('aerocord-asset:///images/scrollbar/HorzThumbGripperActive.png') center no-repeat,
+    url('aerocord-asset:///images/TopBarBg.png') no-repeat center / 100% 100%,
+    linear-gradient(to bottom, #a8c8e0, #90b4d4 40%, #78a0c8);
+  border-color: #5888b0;
+}
+
+::-webkit-scrollbar-button:vertical:decrement {
+  height: 17px;
+  background:
+    url('aerocord-asset:///images/scrollbar/UpGlyphInactive.png') center no-repeat,
+    url('aerocord-asset:///images/TopBarBg.png') no-repeat center / 100% 100%,
+    linear-gradient(to bottom, #f0f0f0, #e0e0e0);
+  border: 1px solid #acacac;
+  border-bottom: none;
+}
+
+::-webkit-scrollbar-button:vertical:decrement:hover {
+  background:
+    url('aerocord-asset:///images/scrollbar/UpGlyphHover.png') center no-repeat,
+    url('aerocord-asset:///images/TopBarBg.png') no-repeat center / 100% 100%,
+    linear-gradient(to bottom, #d4e8f8, #9cc0e4);
+  border-color: #6ea4cd;
+}
+
+::-webkit-scrollbar-button:vertical:decrement:active {
+  background:
+    url('aerocord-asset:///images/scrollbar/UpGlyphActive.png') center no-repeat,
+    url('aerocord-asset:///images/TopBarBg.png') no-repeat center / 100% 100%,
+    linear-gradient(to bottom, #a8c8e0, #78a0c8);
+  border-color: #5888b0;
+}
+
+::-webkit-scrollbar-button:vertical:increment {
+  height: 17px;
+  background:
+    url('aerocord-asset:///images/scrollbar/DownGlyphInactive.png') center no-repeat,
+    url('aerocord-asset:///images/TopBarBg.png') no-repeat center / 100% 100%,
+    linear-gradient(to bottom, #f0f0f0, #e0e0e0);
+  border: 1px solid #acacac;
+  border-top: none;
+}
+
+::-webkit-scrollbar-button:vertical:increment:hover {
+  background:
+    url('aerocord-asset:///images/scrollbar/DownGlyphHover.png') center no-repeat,
+    url('aerocord-asset:///images/TopBarBg.png') no-repeat center / 100% 100%,
+    linear-gradient(to bottom, #d4e8f8, #9cc0e4);
+  border-color: #6ea4cd;
+}
+
+::-webkit-scrollbar-button:vertical:increment:active {
+  background:
+    url('aerocord-asset:///images/scrollbar/DownGlyphActive.png') center no-repeat,
+    url('aerocord-asset:///images/TopBarBg.png') no-repeat center / 100% 100%,
+    linear-gradient(to bottom, #a8c8e0, #78a0c8);
+  border-color: #5888b0;
+}
+
+::-webkit-scrollbar-button:horizontal:decrement {
+  width: 17px;
+  background:
+    url('aerocord-asset:///images/scrollbar/LeftGlyphInactive.png') center no-repeat,
+    url('aerocord-asset:///images/TopBarBg.png') no-repeat center / 100% 100%,
+    linear-gradient(to right, #f0f0f0, #e0e0e0);
+  border: 1px solid #acacac;
+  border-right: none;
+}
+
+::-webkit-scrollbar-button:horizontal:decrement:hover {
+  background:
+    url('aerocord-asset:///images/scrollbar/LeftGlyphHover.png') center no-repeat,
+    url('aerocord-asset:///images/TopBarBg.png') no-repeat center / 100% 100%,
+    linear-gradient(to right, #d4e8f8, #9cc0e4);
+  border-color: #6ea4cd;
+}
+
+::-webkit-scrollbar-button:horizontal:decrement:active {
+  background:
+    url('aerocord-asset:///images/scrollbar/LeftGlyphActive.png') center no-repeat,
+    url('aerocord-asset:///images/TopBarBg.png') no-repeat center / 100% 100%,
+    linear-gradient(to right, #a8c8e0, #78a0c8);
+  border-color: #5888b0;
+}
+
+::-webkit-scrollbar-button:horizontal:increment {
+  width: 17px;
+  background:
+    url('aerocord-asset:///images/scrollbar/RightGlyphInactive.png') center no-repeat,
+    url('aerocord-asset:///images/TopBarBg.png') no-repeat center / 100% 100%,
+    linear-gradient(to right, #f0f0f0, #e0e0e0);
+  border: 1px solid #acacac;
+  border-left: none;
+}
+
+::-webkit-scrollbar-button:horizontal:increment:hover {
+  background:
+    url('aerocord-asset:///images/scrollbar/RightGlyphHover.png') center no-repeat,
+    url('aerocord-asset:///images/TopBarBg.png') no-repeat center / 100% 100%,
+    linear-gradient(to right, #d4e8f8, #9cc0e4);
+  border-color: #6ea4cd;
+}
+
+::-webkit-scrollbar-button:horizontal:increment:active {
+  background:
+    url('aerocord-asset:///images/scrollbar/RightGlyphActive.png') center no-repeat,
+    url('aerocord-asset:///images/TopBarBg.png') no-repeat center / 100% 100%,
+    linear-gradient(to right, #a8c8e0, #78a0c8);
+  border-color: #5888b0;
+}
+
+::-webkit-scrollbar-corner {
+  background: #f0f0f0;
+}
+
+input, textarea {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-size: 12px;
+}
+
+button {
+  cursor: pointer;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-size: 11px;
+}
+
+a {
+  color: var(--wlm-blue);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+.draggable {
+  -webkit-app-region: drag;
+}
+
+.no-drag {
+  -webkit-app-region: no-drag;
+}

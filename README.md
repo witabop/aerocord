@@ -14,7 +14,7 @@ Download Aerocord from the project’s GitHub Releases page. Grab the **Windows 
 
 ## About
 
-Aerocord is a spiritual fork of [Aerochat](https://github.com/not-nullptr/Aerochat), a native C#/WPF Discord client themed after WLM 2009. Aerochat is an excellent project, but it is tightly coupled to the Windows desktop via WPF and .NET and was missing some key features. Aerocord takes the same concept, a Windows Messenger-style Discord experience and rebuilds it on top of Electron and React so the UI layer is web-based and easier to iterate on. The visual language, layout, and general UX philosophy are heavily inspired by Aerochat, and the project would not exist without it.
+Aerocord is a spiritual fork of [Aerochat](https://github.com/not-nullptr/Aerochat), a native C#/WPF Discord client themed after WLM 2009. Aerochat is an excellent project, but it is tightly coupled to the Windows desktop via WPF and .NET (for good reason of course as it makes it more back portable) and was missing some key features. Aerocord takes the same concept, a Windows Messenger-style Discord experience and rebuilds it on top of Electron and React so the UI layer is web-based and easier to iterate on. The visual language, layout, and general UX philosophy are heavily inspired by Aerochat, and the project would not exist without it.
 
 ## Why discord.py-self?
 

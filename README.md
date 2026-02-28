@@ -44,13 +44,16 @@ And much more!
 
 <img width="919" height="705" alt="image" src="https://github.com/user-attachments/assets/b581681f-8164-49e1-b7c2-dfdfe3544cd7" />
 
+## Limitations
 
+- **Larger servers** — Aerocord currently struggles to handle very large servers. It works well for smaller communities and groups of up to around 30–40 people; performance and stability on big servers are known issues. Improving this is a priority and will be worked on in future updates.
+- **Operating systems** — The application is restricted to modern operating systems: **Windows** (primary, supported) and **Linux** (untested but should work).
 
 ## Getting Started
 
 ### Prerequisites
 
-- **Windows 10/11** (64-bit)
+- **Windows 10/11 or Linux (probably)** (64-bit)
 - **Node.js** (LTS recommended)
 - **Python 3.10+** with pip
 

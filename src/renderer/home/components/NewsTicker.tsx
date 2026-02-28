@@ -2,8 +2,8 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { assetUrl } from '../../shared/hooks/useAssets';
 
 const ANNOUNCEMENTS = [
-  { title: 'Aerocord v1.0:', body: 'Welcome to Aerocord! A Discord client inspired by Windows Live Messenger 2009.' },
-  { title: 'Tip:', body: 'Double-click a contact to open a chat window. Type [nudge] to send a nudge!' },
+  { title: 'Aerocord v0.1:', body: 'Welcome to Aerocord! A Discord client inspired by Windows Live Messenger 2009.' },
+  { title: 'Tip:', body: 'On a friends user profile popup, you can remove them as a friend by clicking the friend icon and pressing "Remove Friend"' },
   { title: 'Scenes:', body: 'Customize your look with scenes! Click "Scene" in the bottom bar or click the top right of the home window to change yours.' },
   { title: 'Favorites:', body: 'Right-click any conversation to add it to your Favorites for quick access.' },
 ];

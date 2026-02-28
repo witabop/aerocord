@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aerocord - Windows Live Messenger style Discord client</title>
+  <link rel="icon" href="assets/MainWnd.ico" type="image/x-icon">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Header with glassy bar -->
+  <div class="header-bar">
+    <table class="header-table" cellpadding="0" cellspacing="0" border="0" width="100%">
+      <tr>
+        <td class="header-right">
+          <a href="#">Home</a> |
+          <a href="#download">Download</a> |
+          <a href="https://github.com/witabop/aerocord">GitHub</a>
+        </td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="main">
+    <center>
+      <img src="assets/aerocordlogo.png" alt="Aerocord" class="hero-logo">
+      <p>Windows Live Messenger 2009 style Discord client.</p>
+    </center>
+
+    <div class="glassy-box">
+      <table cellpadding="8" cellspacing="0" border="0" width="100%">
+        <tr>
+          <td width="120" valign="top">
+            <div class="profile-avatar-wrap">
+              <img src="assets/defaultprofilepic.png" alt="" class="avatar-pic" width="64" height="64">
+              <img src="assets/LargeFrameOffline.png" alt="" class="avatar-frame" width="76" height="76">
+            </div>
+            <img src="assets/notification.ico" alt="Aerocord" width="80" height="80" class="section-icon">
+          </td>
+          <td valign="top">
+            <h2>What is Aerocord?</h2>
+            <p>Aerocord is a custom Discord client for Windows that brings back the look and feel of Windows Live Messenger 2009. It is in essence a fork of Aerochat that rewrites the program as an electron app for greater portability across operating systems and ease of use. In its current state, Aerocord is more fully featured as a Discord client than Aerochat, but it still lacks some critical features that Aerochat had like the ability to run on older windows versions for instance.</p>
+            <h2>Request a feature</h2>
+            <p>Have an idea for Aerocord? Open an issue on GitHub to suggest it. Go to the <a href="https://github.com/witabop/aerocord/issues" class="link">Issues</a> page, click <strong>New issue</strong>, and choose the feature-request template (or describe your idea). Or, if you are a developer, feel free to open a PR on the <a href="https://github.com/witabop/aerocord" class="link">GitHub repository</a> with your changes. We can’t promise every request will be implemented, but we do read them.</p>
+          </td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="glassy-box">
+      <h2>Download</h2>
+      <p>Get the latest release from GitHub. You need Windows 10 or 11 (64-bit). Build from source with <code>npm run package</code> or use the Inno Setup script to make an installer.</p>
+      <p><a href="https://github.com/witabop/aerocord/releases" class="link">→ Download Aerocord (Installer)</a></p>
+      <p><a href="https://github.com/witabop/aerocord" class="link">→ Source code</a></p>
+      <h2>Credits</h2>
+      <p>Aerocord is inspired by and credits the following projects:</p>
+      <ul>
+        <li><a href="https://github.com/not-nullptr/Aerochat" class="link">Aerochat</a> native rewrite of a WLM 09 themed Discord client. Aerocord leaned heavily on Aerochat for layout, functionality and image assets as well as inspiring the base concept of the application.</li>
+        <li><a href="https://github.com/dolfies/discord.py-self" class="link">discord.py-self</a> a fork of discord.py for user accounts that enables Aerocord to talk to Discords api.</li>
+      </ul>
+    </div>
+
+    <hr>
+    <p class="footer"><small>© 2026 Aerocord. Not affiliated with Discord or Microsoft.</small></p>
+  </div>
+</body>
+</html>

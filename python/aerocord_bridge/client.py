@@ -18,15 +18,11 @@ import discord
 from .serializers import (
     user_to_vm,
     member_to_vm,
-    presence_to_vm,
     message_to_vm,
     channel_to_vm,
     resolve_user_presence,
-    _status_to_vm,
     _avatar_url,
-    _channel_type_str,
 )
-from .protocol import send_event
 
 
 _CACHE_DIR = Path.home() / ".aerocord"
@@ -46,6 +42,8 @@ class DiscordBridgeClient:
         self._seeded_guilds: set[int] = set()
         self._member_query_progress: dict[int, int] = {}
         self._member_id_cache: dict[int, dict] = self._load_member_cache()
+        self._prefetched_authors: set[int] = set()
+        self._profile_cache: dict[int, tuple[dict, float]] = {}
 
     @staticmethod
     def _load_member_cache() -> dict[int, dict]:
@@ -180,12 +178,20 @@ class DiscordBridgeClient:
         self._unchunkable_guilds.clear()
         self._seeded_guilds.clear()
         self._member_query_progress.clear()
+        self._prefetched_authors.clear()
+        self._profile_cache.clear()
         if self._client:
             try:
                 await self._client.close()
             except Exception:
                 pass
             self._client = None
+
+    async def _resolve_channel(self, channelId: str) -> Any:
+        ch = self._client.get_channel(int(channelId))
+        if ch is None:
+            ch = await self._client.fetch_channel(int(channelId))
+        return ch
 
     def get_current_user(self) -> Optional[dict]:
         if not self._client or not self._client.user:
@@ -379,10 +385,24 @@ class DiscordBridgeClient:
             print(f"[bridge] Guild '{guild.name}' marked unchunkable", file=sys.stderr)
             return False
 
-    _SEED_MAX_CHANNELS = 15
-    _SEED_CHANNEL_DELAY = 0.4
-    _BATCH_DELAY = 0.5
-    _ALPHA_QUERY_DELAY = 0.6
+    _SEED_MAX_CHANNELS = 10
+    _SEED_TOTAL_MESSAGES = 600
+    _SEED_CHANNEL_DELAY = 0.8
+    _BATCH_DELAY = 1.0
+    _ALPHA_QUERY_DELAY = 1.2
+
+    _PREFER_KEYWORDS = {"general", "chat", "talk", "discussion", "lounge", "off-topic", "offtopic", "hangout", "memes"}
+    _SKIP_KEYWORDS = {"announcements", "announcement", "rules", "roles", "info", "welcome", "readme", "news", "updates", "changelog", "faq", "guidelines"}
+
+    @classmethod
+    def _rank_channel_for_seed(cls, ch: Any) -> tuple[int, int]:
+        name = (ch.name or "").lower().replace("-", " ").replace("_", " ")
+        tokens = set(name.split())
+        if tokens & cls._SKIP_KEYWORDS:
+            return (2, ch.position)
+        if tokens & cls._PREFER_KEYWORDS:
+            return (0, ch.position)
+        return (1, ch.position)
 
     async def _seed_recent_authors(self, guild: Any, channel: Any) -> None:
         """For unchunkable guilds, seed member cache from disk cache or by scanning channels."""
@@ -403,20 +423,18 @@ class DiscordBridgeClient:
 
         try:
             me = guild.me or guild.get_member(self._client.user.id) if self._client and self._client.user else None
-            text_channels = sorted(
-                [c for c in guild.channels if isinstance(c, discord.TextChannel)],
-                key=lambda c: c.position,
-            )
+            text_channels = [c for c in guild.channels if isinstance(c, discord.TextChannel)]
             if me:
                 text_channels = [c for c in text_channels if c.permissions_for(me).view_channel]
 
+            text_channels.sort(key=self._rank_channel_for_seed)
             text_channels = text_channels[:self._SEED_MAX_CHANNELS]
             if not text_channels:
                 return
 
             author_ids: set[int] = set()
             after = datetime.now(timezone.utc) - timedelta(weeks=3)
-            msgs_per_channel = max(50, 800 // len(text_channels))
+            msgs_per_channel = max(30, self._SEED_TOTAL_MESSAGES // len(text_channels))
 
             for i, ch in enumerate(text_channels):
                 try:
@@ -457,10 +475,10 @@ class DiscordBridgeClient:
                     timeout=10,
                 )
             except Exception:
-                for uid in batch[:15]:
+                for uid in batch[:10]:
                     try:
                         await guild.fetch_member(uid)
-                        await asyncio.sleep(0.3)
+                        await asyncio.sleep(0.5)
                     except Exception:
                         pass
 
@@ -500,37 +518,40 @@ class DiscordBridgeClient:
         for msg in messages:
             if msg.author and not isinstance(msg.author, discord.Member):
                 uid = msg.author.id
-                if uid not in seen and guild.get_member(uid) is None:
+                if uid not in seen and uid not in self._prefetched_authors and guild.get_member(uid) is None:
                     uncached_ids.append(uid)
                     seen.add(uid)
         if not uncached_ids:
             return
-        await self._batch_fetch_member_ids(guild, uncached_ids[:100])
+        self._prefetched_authors.update(uncached_ids)
+        await self._batch_fetch_member_ids(guild, uncached_ids[:50])
+
+    async def _fetch_and_serialize_messages(self, channelId: str, **history_kwargs: Any) -> list[dict]:
+        """Shared logic for fetching channel messages and serializing them."""
+        channel = await self._resolve_channel(channelId)
+        if not hasattr(channel, "history"):
+            return []
+
+        guild = getattr(channel, "guild", None)
+        if guild and not history_kwargs.get("before"):
+            await self._try_chunk(guild)
+
+        messages = []
+        async for msg in channel.history(**history_kwargs):
+            messages.append(msg)
+        messages.reverse()
+
+        if guild:
+            await self._prefetch_message_authors(guild, messages)
+
+        self_id = self._client.user.id if self._client.user else None
+        return [message_to_vm(self._client, m, self_id) for m in messages]
 
     async def get_messages(self, channelId: str) -> list[dict]:
         if not self._client:
             return []
         try:
-            channel = self._client.get_channel(int(channelId))
-            if channel is None:
-                channel = await self._client.fetch_channel(int(channelId))
-            if not hasattr(channel, "history"):
-                return []
-
-            guild = getattr(channel, "guild", None)
-            if guild:
-                await self._try_chunk(guild)
-
-            messages = []
-            async for msg in channel.history(limit=50):
-                messages.append(msg)
-            messages.reverse()
-
-            if guild:
-                await self._prefetch_message_authors(guild, messages)
-
-            self_id = self._client.user.id if self._client.user else None
-            return [message_to_vm(self._client, m, self_id) for m in messages]
+            return await self._fetch_and_serialize_messages(channelId, limit=50)
         except discord.Forbidden:
             print(f"[bridge] get_messages: no access to channel {channelId}", file=sys.stderr)
             return []
@@ -542,25 +563,8 @@ class DiscordBridgeClient:
         if not self._client:
             return []
         try:
-            channel = self._client.get_channel(int(channelId))
-            if channel is None:
-                channel = await self._client.fetch_channel(int(channelId))
-            if not hasattr(channel, "history"):
-                return []
-
-            guild = getattr(channel, "guild", None)
-
             before_obj = discord.Object(id=int(beforeId))
-            messages = []
-            async for msg in channel.history(limit=limit, before=before_obj):
-                messages.append(msg)
-            messages.reverse()
-
-            if guild:
-                await self._prefetch_message_authors(guild, messages)
-
-            self_id = self._client.user.id if self._client.user else None
-            return [message_to_vm(self._client, m, self_id) for m in messages]
+            return await self._fetch_and_serialize_messages(channelId, limit=limit, before=before_obj)
         except discord.Forbidden:
             print(f"[bridge] get_messages_before: no access to channel {channelId}", file=sys.stderr)
             return []
@@ -572,9 +576,7 @@ class DiscordBridgeClient:
         if not self._client:
             return {"success": False, "error": "Not connected"}
         try:
-            channel = self._client.get_channel(int(channelId))
-            if channel is None:
-                channel = await self._client.fetch_channel(int(channelId))
+            channel = await self._resolve_channel(channelId)
             if not hasattr(channel, "send"):
                 return {"success": False, "error": "Cannot send in this channel"}
 
@@ -600,9 +602,7 @@ class DiscordBridgeClient:
         if not self._client:
             return False
         try:
-            channel = self._client.get_channel(int(channelId))
-            if channel is None:
-                channel = await self._client.fetch_channel(int(channelId))
+            channel = await self._resolve_channel(channelId)
             if not hasattr(channel, "fetch_message"):
                 return False
             msg = await channel.fetch_message(int(messageId))
@@ -616,9 +616,7 @@ class DiscordBridgeClient:
         if not self._client:
             return False
         try:
-            channel = self._client.get_channel(int(channelId))
-            if channel is None:
-                channel = await self._client.fetch_channel(int(channelId))
+            channel = await self._resolve_channel(channelId)
             if not hasattr(channel, "fetch_message"):
                 return False
             msg = await channel.fetch_message(int(messageId))
@@ -632,9 +630,7 @@ class DiscordBridgeClient:
         if not self._client:
             return
         try:
-            channel = self._client.get_channel(int(channelId))
-            if channel is None:
-                channel = await self._client.fetch_channel(int(channelId))
+            channel = await self._resolve_channel(channelId)
             if hasattr(channel, "typing"):
                 await channel.typing()
         except Exception:
@@ -644,9 +640,7 @@ class DiscordBridgeClient:
         if not self._client:
             return None
         try:
-            channel = self._client.get_channel(int(channelId))
-            if channel is None:
-                channel = await self._client.fetch_channel(int(channelId))
+            channel = await self._resolve_channel(channelId)
             if not channel:
                 return None
 
@@ -686,32 +680,25 @@ class DiscordBridgeClient:
         if not guild:
             return []
         me = guild.me
-        visible_channel_ids: set[int] = set()
-        filtered: list = []
+        allowed_types = (discord.TextChannel, discord.VoiceChannel, discord.StageChannel, discord.CategoryChannel)
+        visible: list = []
         for c in guild.channels:
-            if not isinstance(c, (discord.TextChannel, discord.VoiceChannel, discord.StageChannel, discord.CategoryChannel)):
+            if not isinstance(c, allowed_types):
                 continue
             if me and not isinstance(c, discord.CategoryChannel):
                 try:
-                    perms = c.permissions_for(me)
-                    if not perms.view_channel:
+                    if not c.permissions_for(me).view_channel:
                         continue
                 except Exception:
                     pass
-            filtered.append(c)
-            visible_channel_ids.add(c.id)
+            visible.append(c)
 
-        final = []
-        for c in filtered:
-            if isinstance(c, discord.CategoryChannel):
-                has_children = any(
-                    getattr(ch, "category_id", None) == c.id
-                    for ch in filtered
-                    if not isinstance(ch, discord.CategoryChannel) and ch.id in visible_channel_ids
-                )
-                if not has_children:
-                    continue
-            final.append(c)
+        non_category_ids = {c.id for c in visible if not isinstance(c, discord.CategoryChannel)}
+        final = [
+            c for c in visible
+            if not isinstance(c, discord.CategoryChannel)
+            or any(getattr(ch, "category_id", None) == c.id for ch in visible if ch.id in non_category_ids)
+        ]
 
         final.sort(key=lambda c: c.position)
         return [channel_to_vm(self._client, c) for c in final]
@@ -723,53 +710,22 @@ class DiscordBridgeClient:
         if not guild:
             return []
 
+        self_id = self._client.user.id if self._client.user else None
         channel_map: dict[str, list[dict]] = {}
 
-        for vc in guild.voice_channels:
-            # voice_states is a dict of {member_id: VoiceState}
+        for vc in (*guild.voice_channels, *guild.stage_channels):
             for member_id, state in vc.voice_states.items():
                 member = guild.get_member(member_id)
                 if not member:
                     continue
 
-                cid = str(vc.id)
-                if cid not in channel_map:
-                    channel_map[cid] = []
+                is_self = member.id == self_id
+                if is_self:
+                    user_status = "Online"
+                else:
+                    user_status = resolve_user_presence(self._client, member.id).get("status", "Offline")
 
-                is_client = self._client.user and member.id == self._client.user.id
-                user_status: str = "Online" if is_client else "Offline"
-                if not is_client:
-                    p = resolve_user_presence(self._client, member.id)
-                    user_status = p.get("status", "Offline")
-
-                channel_map[cid].append({
-                    "userId": str(member.id),
-                    "userName": member.display_name or member.name,
-                    "userAvatar": _avatar_url(member, 32),
-                    "userStatus": user_status,
-                    "selfMute": state.self_mute or False,
-                    "selfDeaf": state.self_deaf or False,
-                    "speaking": False,
-                })
-
-        # Also check stage channels
-        for sc in guild.stage_channels:
-            for member_id, state in sc.voice_states.items():
-                member = guild.get_member(member_id)
-                if not member:
-                    continue
-
-                cid = str(sc.id)
-                if cid not in channel_map:
-                    channel_map[cid] = []
-
-                is_client = self._client.user and member.id == self._client.user.id
-                user_status: str = "Online" if is_client else "Offline"
-                if not is_client:
-                    p = resolve_user_presence(self._client, member.id)
-                    user_status = p.get("status", "Offline")
-
-                channel_map[cid].append({
+                channel_map.setdefault(str(vc.id), []).append({
                     "userId": str(member.id),
                     "userName": member.display_name or member.name,
                     "userAvatar": _avatar_url(member, 32),
@@ -793,9 +749,7 @@ class DiscordBridgeClient:
         if not self._client:
             return []
         try:
-            channel = self._client.get_channel(int(channelId))
-            if channel is None:
-                channel = await self._client.fetch_channel(int(channelId))
+            channel = await self._resolve_channel(channelId)
             if not channel:
                 return []
 
@@ -918,9 +872,7 @@ class DiscordBridgeClient:
         if not self._client:
             return {"success": False, "error": "Not connected"}
         try:
-            channel = self._client.get_channel(int(channelId))
-            if channel is None:
-                channel = await self._client.fetch_channel(int(channelId))
+            channel = await self._resolve_channel(channelId)
             if not channel:
                 return {"success": False, "error": "Channel not found"}
             if not isinstance(channel, (discord.DMChannel, discord.GroupChannel)):
@@ -971,11 +923,32 @@ class DiscordBridgeClient:
             print(f"[bridge] get_pending_friend_requests error: {e}", file=sys.stderr)
             return []
 
+    _PROFILE_CACHE_TTL = 300
+
     async def get_user_profile(self, userId: str) -> Optional[dict]:
         if not self._client:
             return None
+        uid = int(userId)
+
+        now = asyncio.get_event_loop().time()
+        cached = self._profile_cache.get(uid)
+        if cached:
+            entry, ts = cached
+            if now - ts < self._PROFILE_CACHE_TTL:
+                entry["presence"] = resolve_user_presence(self._client, uid)
+                return entry
+
         try:
-            user = await self._client.fetch_user(int(userId))
+            user = None
+            for g in self._client.guilds:
+                user = g.get_member(uid)
+                if user:
+                    break
+            if not user:
+                user = self._client.get_user(uid)
+            if not user:
+                user = await self._client.fetch_user(uid)
+
             profile = None
             try:
                 profile = await user.profile()
@@ -992,7 +965,7 @@ class DiscordBridgeClient:
             if user.banner:
                 banner_url = str(user.banner.with_size(512).url)
 
-            return {
+            result = {
                 "id": str(user.id),
                 "name": user.display_name or user.name,
                 "username": user.name,
@@ -1000,9 +973,11 @@ class DiscordBridgeClient:
                 "bio": bio,
                 "accentColor": accent_color,
                 "bannerUrl": banner_url,
-                "presence": resolve_user_presence(self._client, user.id),
+                "presence": resolve_user_presence(self._client, uid),
                 "createdAt": user.created_at.isoformat() if user.created_at else "",
             }
+            self._profile_cache[uid] = (result, now)
+            return result
         except Exception as e:
             print(f"[bridge] get_user_profile error: {e}", file=sys.stderr)
             return None

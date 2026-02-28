@@ -3,8 +3,8 @@ import { assetUrl } from '../../shared/hooks/useAssets';
 
 const ANNOUNCEMENTS = [
   { title: 'Aerocord v0.1:', body: 'Welcome to Aerocord! A Discord client inspired by Windows Live Messenger 2009.' },
-  { title: 'Tip:', body: 'On a friends user profile popup, you can remove them as a friend by clicking the friend icon and pressing "Remove Friend"' },
-  { title: 'Scenes:', body: 'Customize your look with scenes! Click "Scene" in the bottom bar or click the top right of the home window to change yours.' },
+  { title: 'Tip:', body: 'On a friends user profile popup, you can remove them as a friend by clicking the friend icon!' },
+  { title: 'Scenes:', body: 'Customize your look with scenes! Click "Scene" in the bottom bar to change yours.' },
   { title: 'Favorites:', body: 'Right-click any conversation to add it to your Favorites for quick access.' },
 ];
 

@@ -4,6 +4,8 @@ import * as url from 'url';
 import { settingsManager } from './services/settings';
 import { discordClient } from './discord/client';
 import { registerDiscordEvents } from './discord/events';
+import { voiceManager } from './discord/voice';
+import { pythonBridge } from './discord/bridge';
 import { registerIPCHandlers } from './ipc/handlers';
 import { windowManager } from './windows/manager';
 import { IPC } from './ipc/channels';
@@ -39,7 +41,9 @@ app.on('ready', async () => {
     });
   });
 
-  const assetsBase = path.resolve(__dirname, '../../src/assets');
+  const assetsBase = app.isPackaged
+    ? path.join(process.resourcesPath, 'assets')
+    : path.resolve(__dirname, '../../src/assets');
   protocol.handle('aerocord-asset', (request) => {
     const parsed = new URL(request.url);
     const relativePath = decodeURIComponent(parsed.pathname).replace(/^\/+/, '');
@@ -69,6 +73,8 @@ app.on('ready', async () => {
       homeWindow.webContents.once('did-finish-load', () => {
         homeWindow.webContents.send(IPC.EVENT_READY);
       });
+      const overlayStatus = await discordClient.getStatusForOverlay();
+      windowManager.setStatusOverlay(overlayStatus);
     } else {
       const lw = windowManager.loginWindow;
       if (lw && !lw.isDestroyed()) {
@@ -78,6 +84,16 @@ app.on('ready', async () => {
   } else {
     windowManager.createLoginWindow();
   }
+});
+
+let quitting = false;
+app.on('before-quit', async (event) => {
+  if (quitting) return;
+  event.preventDefault();
+  quitting = true;
+  await voiceManager.leave();
+  await pythonBridge.stop();
+  app.exit(0);
 });
 
 app.on('window-all-closed', () => {

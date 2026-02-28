@@ -1,6 +1,10 @@
+/* Settings window - Windows 7 native dialog style */
+
 .settings-window {
   display: flex;
   flex-direction: column;
+  background: #ececec;
+  border: 1px solid #c0c0c0;
 }
 
 .settings-loading {
@@ -8,86 +12,175 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #6a7a8a;
+  color: #404040;
 }
 
 .settings-body {
   flex: 1;
   display: flex;
   overflow: hidden;
+  min-height: 0;
 }
 
+/* ---- Left pane: navigation (thin list with gray frame) ---- */
 .settings-sidebar {
-  width: 130px;
-  background: #f0f4f8;
-  border-right: 1px solid #c8d8e8;
+  width: 120px;
+  margin: 8px 0 8px 8px;
+  background: #ffffff;
+  border: 1px solid #d4d4d4;
+  border-right: 1px solid #d4d4d4;
   overflow-y: auto;
   flex-shrink: 0;
 }
 
 .settings-sidebar-item {
-  padding: 8px 12px;
-  font-size: 11px;
-  color: #3a5a7a;
+  padding: 8px 10px;
+  font-size: 12px;
+  color: #000000;
   cursor: pointer;
-  border-bottom: 1px solid #e0e8f0;
+  border: none;
+  background: transparent;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
 }
 
 .settings-sidebar-item:hover {
-  background: #e0eaf4;
+  background: transparent;
 }
 
 .settings-sidebar-item.active {
-  background: #d0e0f0;
+  background: #2a7fd4;
+  color: #ffffff;
   font-weight: 600;
 }
 
+/* ---- Right pane: content (light grey, slightly darker) ---- */
 .settings-content {
   flex: 1;
-  padding: 16px;
+  padding: 20px 24px;
   overflow-y: auto;
+  background: #ececec;
 }
 
 .settings-category-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #2a4a6a;
-  margin-bottom: 14px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid #d0dce8;
+  font-size: 16px;
+  font-weight: 500;
+  color: #000000;
+  margin-bottom: 18px;
+  padding-bottom: 0;
+  border: none;
 }
 
 .settings-row {
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
+/* ---- Windows 7 style checkboxes ---- */
 .settings-checkbox-label {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 11px;
+  gap: 10px;
+  font-size: 12px;
+  color: #000000;
   cursor: pointer;
-  padding: 3px 0;
+  padding: 2px 0;
 }
 
 .settings-checkbox-label input[type="checkbox"] {
   margin: 0;
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1px solid #707070;
+  background: #ffffff;
+  border-radius: 1px;
+  cursor: pointer;
+  position: relative;
+  vertical-align: middle;
 }
 
-.settings-number-row,
-.settings-select-row {
+.settings-checkbox-label input[type="checkbox"]:hover {
+  border-color: #4a90d9;
+}
+
+.settings-checkbox-label input[type="checkbox"]:checked {
+  background: #ffffff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 13'%3E%3Cpath fill='%230d4a8a' d='M11.5 3.5L5 10 1.5 6.5 2.5 5.5l2.5 2.5 5.5-5.5 1 1z'/%3E%3C/svg%3E") no-repeat center;
+  background-size: 11px 11px;
+  border-color: #707070;
+}
+
+.settings-checkbox-label input[type="checkbox"]:focus {
+  outline: 1px dotted #000;
+  outline-offset: 1px;
+}
+
+/* ---- Time format / select row ---- */
+.settings-number-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
-  font-size: 11px;
+  font-size: 12px;
+  color: #000000;
+  margin-bottom: 12px;
+}
+
+.settings-number-row span {
+  min-width: 140px;
+}
+
+.settings-select-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 12px;
+  color: #000000;
+  margin-bottom: 12px;
+}
+
+.settings-select-row span {
+  font-weight: 400;
+}
+
+/* ---- Windows 7 style dropdown (select) ---- */
+.settings-content .settings-select,
+.settings-content select.settings-select {
+  width: auto;
+  min-width: 200px;
+  padding: 4px 28px 4px 8px;
+  font-size: 12px;
+  color: #000000;
+  background-color: #f0f0f0;
+  border: 1px solid #a0a0a0;
+  border-radius: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23000' d='M2.5 4.5L6 8l3.5-3.5H2.5z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  cursor: pointer;
+}
+
+.settings-content .settings-select:focus,
+.settings-content select.settings-select:focus {
+  border-color: #4a90d9;
+  outline: none;
 }
 
 .settings-number-input {
-  width: 60px;
+  width: 64px;
   text-align: center;
+  padding: 4px 6px;
+  font-size: 12px;
+  background: #ffffff;
+  border: 1px solid #a0a0a0;
+  border-radius: 0;
 }
 
-.settings-select {
-  width: 120px;
+.settings-number-input:focus {
+  border-color: #4a90d9;
+  outline: none;
 }

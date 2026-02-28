@@ -33,6 +33,7 @@ export interface Settings {
   displayAds: boolean;
   displayAerochatAttribution: boolean;
   displayLinkPreviews: boolean;
+  showMemberList: boolean;
   selectedTimeFormat: '24h' | '12h';
   discordDeveloperMode: boolean;
   inputDeviceIndex: number;
@@ -72,6 +73,7 @@ const DEFAULTS: Settings = {
   displayAds: true,
   displayAerochatAttribution: true,
   displayLinkPreviews: true,
+  showMemberList: true,
   selectedTimeFormat: '24h',
   discordDeveloperMode: false,
   inputDeviceIndex: 0,

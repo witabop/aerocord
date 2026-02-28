@@ -1,15 +1,26 @@
 import { BrowserWindow, screen, nativeImage, Tray, app } from 'electron';
 import * as path from 'path';
+import { voiceManager } from '../discord/voice';
+import { discordClient } from '../discord/client';
+import { IPC } from '../ipc/channels';
 
-const APP_ICON = nativeImage.createFromPath(
-  path.resolve(__dirname, '../../src/assets/images/icons/MainWnd.ico'),
-);
+function getAppIconPath(): string {
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, 'MainWnd.ico');
+  }
+  return path.resolve(__dirname, '../../src/assets/images/icons/MainWnd.ico');
+}
+
+const APP_ICON = nativeImage.createFromPath(getAppIconPath());
 
 function trayIconPath(status: string): string {
   const file = status === 'Online' ? 'Active.ico'
     : status === 'Idle' ? 'Idle.ico'
     : status === 'DoNotDisturb' ? 'Dnd.ico'
     : 'Offline.ico';
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, 'assets', 'images', 'tray', file);
+  }
   return path.resolve(__dirname, '../../src/assets/images/tray', file);
 }
 
@@ -29,6 +40,7 @@ class WindowManager {
   private _loginWindow: BrowserWindow | null = null;
   private _homeWindow: BrowserWindow | null = null;
   private _chatWindows: Map<string, BrowserWindow> = new Map();
+  private _openNotifyEntryIds: Set<string> = new Set();
   private _settingsWindow: BrowserWindow | null = null;
   private _tray: Tray | null = null;
 
@@ -46,9 +58,10 @@ class WindowManager {
     }
 
     this._loginWindow = new BrowserWindow({
-      width: 460,
-      height: 500,
-      resizable: false,
+      width: 360,
+      height: 700,
+      minWidth: 280,
+      minHeight: 400,
       autoHideMenuBar: true,
       icon: APP_ICON,
       title: 'Windows Live Messenger',
@@ -87,11 +100,15 @@ class WindowManager {
 
     this._homeWindow.loadURL(HOME_WINDOW_WEBPACK_ENTRY);
     this._homeWindow.on('closed', () => {
+      voiceManager.leave();
       this._homeWindow = null;
       for (const [, win] of this._chatWindows) {
         if (!win.isDestroyed()) win.close();
       }
       this._chatWindows.clear();
+    });
+    this._homeWindow.webContents.on('render-process-gone', () => {
+      voiceManager.leave();
     });
 
     return this._homeWindow;
@@ -101,6 +118,12 @@ class WindowManager {
     const existing = this._chatWindows.get(channelId);
     if (existing && !existing.isDestroyed()) {
       existing.focus();
+      discordClient.getNotifyEntryIdForChannel(channelId).then(entryId => {
+        this._openNotifyEntryIds.add(entryId);
+        if (this._homeWindow && !this._homeWindow.isDestroyed()) {
+          this._homeWindow.webContents.send(IPC.EVENT_CHAT_OPENED, { notifyEntryId: entryId });
+        }
+      });
       return existing;
     }
 
@@ -124,11 +147,33 @@ class WindowManager {
     chatWindow.loadURL(url.toString());
     this._chatWindows.set(channelId, chatWindow);
 
+    let resolvedEntryId = channelId;
+    discordClient.getNotifyEntryIdForChannel(channelId).then(entryId => {
+      resolvedEntryId = entryId;
+      this._openNotifyEntryIds.add(entryId);
+      if (this._homeWindow && !this._homeWindow.isDestroyed()) {
+        this._homeWindow.webContents.send(IPC.EVENT_CHAT_OPENED, { notifyEntryId: entryId });
+      }
+    });
+
     chatWindow.on('closed', () => {
+      voiceManager.leave();
       this._chatWindows.delete(channelId);
+      this._openNotifyEntryIds.delete(resolvedEntryId);
+    });
+    chatWindow.webContents.on('render-process-gone', () => {
+      voiceManager.leave();
     });
 
     return chatWindow;
+  }
+
+  closeChatWindow(channelId: string): void {
+    const win = this._chatWindows.get(channelId);
+    if (win && !win.isDestroyed()) {
+      win.close();
+      this._chatWindows.delete(channelId);
+    }
   }
 
   openSettingsWindow(): BrowserWindow {
@@ -176,8 +221,10 @@ class WindowManager {
     url.hash = encodeURIComponent(JSON.stringify(data));
     notifWindow.loadURL(url.toString());
 
-    const { height: screenHeight } = screen.getPrimaryDisplay().workAreaSize;
-    const x = 10;
+    const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workAreaSize;
+    const notifWidth = 270;
+    const padding = 10;
+    const x = screenWidth - notifWidth - padding;
     const y = screenHeight - 120;
     notifWindow.setPosition(x, y);
 
@@ -193,6 +240,21 @@ class WindowManager {
       this._loginWindow.close();
       this._loginWindow = null;
     }
+  }
+
+  isChannelOpen(channelId: string): boolean {
+    const win = this._chatWindows.get(channelId);
+    return !!(win && !win.isDestroyed());
+  }
+
+  isChannelOpenAndFocused(channelId: string): boolean {
+    const win = this._chatWindows.get(channelId);
+    if (!win || win.isDestroyed()) return false;
+    return win.id === BrowserWindow.getFocusedWindow()?.id;
+  }
+
+  hasNotifyEntryOpen(notifyEntryId: string): boolean {
+    return this._openNotifyEntryIds.has(notifyEntryId);
   }
 
   get homeWindow(): BrowserWindow | null {

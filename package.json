@@ -1,8 +1,8 @@
 {
   "name": "aerocord",
   "productName": "aerocord",
-  "version": "1.0.0",
-  "description": "My Electron application description",
+  "version": "0.1",
+  "description": "A Discord client inspired by Windows Live Messenger 2009",
   "main": ".webpack/main",
   "private": true,
   "scripts": {
@@ -15,7 +15,7 @@
   "keywords": [],
   "author": {
     "name": "witabop",
-    "email": "jamesonbrown76@gmail.com"
+    "email": "hotmanathotman@gmail.com"
   },
   "license": "MIT",
   "devDependencies": {
@@ -44,12 +44,8 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "@stablelib/xchacha20poly1305": "^2.0.1",
-    "discord.js-selfbot-v13": "^3.7.1",
     "electron-squirrel-startup": "^1.0.1",
-    "opusscript": "^0.0.8",
     "react": "^19.2.4",
-    "react-dom": "^19.2.4",
-    "tweetnacl": "^1.0.3"
+    "react-dom": "^19.2.4"
   }
 }

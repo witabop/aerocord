@@ -1,25 +1,35 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useIPCEvent } from '../shared/hooks/useIPC';
 import { ContactList } from './components/ContactList';
 import { UserProfile } from './components/UserProfile';
-import { NewsTicker } from './components/NewsTicker';
+import { NewsTicker, type WhatsNewEntry } from './components/NewsTicker';
 import { ScenePicker } from './components/ScenePicker';
 import { AddFriendPopup } from './components/AddFriendPopup';
 import { assetUrl } from '../shared/hooks/useAssets';
 import { playSound } from '../shared/utils/sounds';
+import { computeTextColors } from '../shared/utils/colors';
 import type { UserVM, HomeListCategoryVM, HomeListItemVM, SceneVM, SettingsData } from '../shared/types';
 import './home.css';
 
-function computeTextColors(hex: string): { textColor: string; shadowColor: string } {
-  const clean = hex.replace('#', '');
-  const r = parseInt(clean.substring(0, 2), 16);
-  const g = parseInt(clean.substring(2, 4), 16);
-  const b = parseInt(clean.substring(4, 6), 16);
-  const isLight = r * 0.299 + g * 0.587 + b * 0.114 > 140;
-  return {
-    textColor: isLight ? '#1a1a1a' : '#ffffff',
-    shadowColor: isLight ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.5)',
-  };
+/**
+ * When we refetch private channels (e.g. after messageCreate), the API returns Offline
+ * for users we just unfriended because Discord stops sending their presence. Merge
+ * so we keep the previous non-Offline presence for DMs instead of overwriting with Offline.
+ */
+function mergeConversationsPresence(
+  prev: HomeListItemVM[],
+  next: HomeListItemVM[],
+): HomeListItemVM[] {
+  return next.map((nextItem) => {
+    if (!nextItem.recipientId) return nextItem;
+    const newStatus = (nextItem.presence?.status ?? '').toString().toLowerCase();
+    if (newStatus !== 'offline') return nextItem;
+    const prevItem = prev.find((p) => p.id === nextItem.id);
+    if (!prevItem?.presence?.status) return nextItem;
+    const prevStatus = (prevItem.presence.status ?? '').toString().toLowerCase();
+    if (prevStatus === 'offline') return nextItem;
+    return { ...nextItem, presence: prevItem.presence };
+  });
 }
 
 export const HomeApp: React.FC = () => {
@@ -30,27 +40,36 @@ export const HomeApp: React.FC = () => {
   const [searchText, setSearchText] = useState('');
   const [showScenePicker, setShowScenePicker] = useState(false);
   const [showAddFriend, setShowAddFriend] = useState(false);
+  type CornerPhase = 'idle' | 'open' | 'closing';
+  const [cornerPhase, setCornerPhase] = useState<CornerPhase>('idle');
+  const [openHeld, setOpenHeld] = useState(false);
+  const cornerCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const openHeldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [settings, setSettings] = useState<SettingsData | null>(null);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
+  const [friendIds, setFriendIds] = useState<Set<string>>(new Set());
   const [pendingRequests, setPendingRequests] = useState<HomeListItemVM[]>([]);
   const [notifiedChannels, setNotifiedChannels] = useState<Set<string>>(new Set());
+  const recentlyUnfriendedRef = useRef<Set<string>>(new Set());
 
   const loadData = useCallback(async () => {
-    const [user, channels, guilds, currentScene, appSettings, favIds, pending] = await Promise.all([
+    const [user, channels, guilds, currentScene, appSettings, favIds, friends, pending] = await Promise.all([
       window.aerocord.user.getCurrent(),
       window.aerocord.contacts.getPrivateChannels(),
       window.aerocord.contacts.getGuilds(),
       window.aerocord.theme.getCurrent(),
       window.aerocord.settings.get(),
       window.aerocord.contacts.getFavorites(),
+      window.aerocord.contacts.getFriends(),
       window.aerocord.contacts.getPendingRequests(),
     ]);
     setCurrentUser(user);
-    setConversations(channels);
+    setConversations((prev) => mergeConversationsPresence(prev, channels));
     setServerCategories(guilds);
     setScene(currentScene);
     setSettings(appSettings as SettingsData);
     setFavoriteIds(new Set(favIds));
+    setFriendIds(new Set(friends));
     setPendingRequests(pending);
   }, []);
 
@@ -61,10 +80,19 @@ export const HomeApp: React.FC = () => {
   useIPCEvent('event:ready', () => { loadData(); });
 
   useIPCEvent('event:presenceUpdate', (data: unknown) => {
-    const { userId, presence } = data as { userId: string; presence: any };
+    const { userId, presence, name, avatar } = data as { userId: string; presence: any; name?: string; avatar?: string };
+    const status = presence?.status;
+    const isOffline = status === 'Offline' || status === 'offline';
+    const justUnfriended = recentlyUnfriendedRef.current.has(userId);
+    if (isOffline && justUnfriended) {
+      return;
+    }
     setConversations(prev => prev.map(c => {
-      if (c.recipientId === userId) return { ...c, presence };
-      return c;
+      if (c.recipientId !== userId) return c;
+      const updates: Partial<typeof c> = { presence };
+      if (name) updates.name = name;
+      if (avatar) updates.image = avatar;
+      return { ...c, ...updates };
     }));
     if (currentUser && currentUser.id === userId) {
       setCurrentUser(prev => prev ? { ...prev, presence } : prev);
@@ -72,24 +100,58 @@ export const HomeApp: React.FC = () => {
   });
 
   useIPCEvent('event:messageCreate', (data: unknown) => {
-    const msg = data as { channelId?: string; author?: { id?: string } };
-    if (msg.channelId && msg.author?.id !== currentUser?.id) {
-      setNotifiedChannels(prev => new Set(prev).add(msg.channelId!));
+    const msg = data as { channelId?: string; author?: { id?: string }; mentionsSelf?: boolean; isDirectMessage?: boolean; notifyEntryId?: string; notifyEntryOpen?: boolean };
+    const fromOther = msg.author?.id !== currentUser?.id;
+    const entryId = msg.notifyEntryId ?? msg.channelId;
+    const shouldNotify =
+      fromOther &&
+      entryId &&
+      !msg.notifyEntryOpen &&
+      (msg.mentionsSelf || msg.isDirectMessage);
+    if (shouldNotify) {
+      setNotifiedChannels(prev => new Set(prev).add(entryId!));
     }
-    window.aerocord.contacts.getPrivateChannels().then(setConversations);
+    window.aerocord.contacts.getPrivateChannels().then((channels) =>
+      setConversations((prev) => mergeConversationsPresence(prev, channels)),
+    );
     window.aerocord.contacts.getPendingRequests().then(setPendingRequests);
   });
 
+  useIPCEvent('event:chatOpened', (data: unknown) => {
+    const { notifyEntryId } = data as { notifyEntryId?: string };
+    if (notifyEntryId) {
+      setNotifiedChannels(prev => {
+        const next = new Set(prev);
+        next.delete(notifyEntryId);
+        return next;
+      });
+    }
+  });
+
   useIPCEvent('event:channelCreate', () => {
-    window.aerocord.contacts.getPrivateChannels().then(setConversations);
+    window.aerocord.contacts.getPrivateChannels().then((channels) =>
+      setConversations((prev) => mergeConversationsPresence(prev, channels)),
+    );
   });
 
   useIPCEvent('event:channelDelete', () => {
-    window.aerocord.contacts.getPrivateChannels().then(setConversations);
+    window.aerocord.contacts.getPrivateChannels().then((channels) =>
+      setConversations((prev) => mergeConversationsPresence(prev, channels)),
+    );
+  });
+
+  useIPCEvent('event:relationshipChange', () => {
+    window.aerocord.contacts.getPendingRequests().then(setPendingRequests);
+    window.aerocord.contacts.getFriends().then(friends => setFriendIds(new Set(friends)));
   });
 
   useIPCEvent('play-sound', (name: unknown) => {
     if (typeof name === 'string') playSound(name);
+  });
+
+  useIPCEvent('call:incoming', (data: unknown) => {
+    const { channelId } = data as { channelId: string; callerId: string };
+    window.aerocord.windows.openChat(channelId);
   });
 
   const handleOpenChat = useCallback((channelId: string) => {
@@ -101,10 +163,42 @@ export const HomeApp: React.FC = () => {
     window.aerocord.windows.openChat(channelId);
   }, []);
 
+  /** For friend-request list: item.id is userId; create or get DM then open chat. */
+  const handleOpenChatForUser = useCallback(async (userId: string) => {
+    try {
+      const channelId = await window.aerocord.channels.getOrCreateDM(userId);
+      setNotifiedChannels(prev => {
+        const next = new Set(prev);
+        next.delete(channelId);
+        return next;
+      });
+      window.aerocord.windows.openChat(channelId);
+    } catch {
+      // e.g. Not connected or API error
+    }
+  }, []);
+
+  const handleAcceptFriendRequest = useCallback(async (userId: string) => {
+    const result = await window.aerocord.contacts.acceptFriendRequest(userId);
+    if (result.success) {
+      window.aerocord.contacts.getPendingRequests().then(setPendingRequests);
+      window.aerocord.contacts.getPrivateChannels().then((channels) =>
+        setConversations((prev) => mergeConversationsPresence(prev, channels)),
+      );
+    }
+  }, []);
+
+  const handleIgnoreFriendRequest = useCallback(async (userId: string) => {
+    const result = await window.aerocord.contacts.ignoreFriendRequest(userId);
+    if (result.success) {
+      window.aerocord.contacts.getPendingRequests().then(setPendingRequests);
+    }
+  }, []);
+
   const handleStatusChange = useCallback(async (status: string) => {
     await window.aerocord.user.setStatus(status);
-    const user = await window.aerocord.user.getCurrent();
-    setCurrentUser(user);
+    // Do not call getCurrent() here: main already broadcasts event:presenceUpdate with the new status.
+    // Calling getCurrent() can return stale presence from the bridge cache and overwrite the ring by one step.
   }, []);
 
   const handleCustomStatusChange = useCallback(async (text: string | null) => {
@@ -137,41 +231,157 @@ export const HomeApp: React.FC = () => {
     });
   }, []);
 
-  const allItems = [
+  const handleCloseConversation = useCallback(async (channelId: string) => {
+    const result = await window.aerocord.channels.closeConversation(channelId);
+    if (result.success) {
+      window.aerocord.contacts.getPrivateChannels().then((channels) =>
+        setConversations((prev) => mergeConversationsPresence(prev, channels)),
+      );
+      setFavoriteIds(prev => {
+        const next = new Set(prev);
+        next.delete(channelId);
+        window.aerocord.contacts.setFavorites(Array.from(next));
+        return next;
+      });
+    }
+  }, []);
+
+  const handleRemoveFriend = useCallback(async (targetUserId: string) => {
+    recentlyUnfriendedRef.current.add(targetUserId);
+    const clearAt = setTimeout(() => {
+      recentlyUnfriendedRef.current.delete(targetUserId);
+    }, 8000);
+    const result = await window.aerocord.contacts.removeFriend(targetUserId);
+    if (result?.success) {
+      window.aerocord.contacts.getFriends().then(friends => setFriendIds(new Set(friends)));
+    } else {
+      recentlyUnfriendedRef.current.delete(targetUserId);
+      clearTimeout(clearAt);
+    }
+  }, []);
+
+  const allItems = useMemo(() => [
     ...conversations,
     ...serverCategories.flatMap(c => c.items),
-  ];
+  ], [conversations, serverCategories]);
 
-  const favoriteItems = allItems.filter(i => favoriteIds.has(i.id));
+  const favoriteItems = useMemo(
+    () => allItems.filter(i => favoriteIds.has(i.id)),
+    [allItems, favoriteIds],
+  );
 
-  const filteredConversations = searchText
-    ? conversations.filter(c =>
-        c.name.toLowerCase().includes(searchText.toLowerCase())
-      )
-    : conversations;
+  const searchLower = useMemo(() => searchText.toLowerCase(), [searchText]);
 
-  const filteredServers = searchText
-    ? serverCategories.map(cat => ({
-        ...cat,
-        items: cat.items.filter(item =>
-          item.name.toLowerCase().includes(searchText.toLowerCase())
-        ),
-      })).filter(cat => cat.items.length > 0)
-    : serverCategories;
+  const filteredConversations = useMemo(
+    () => searchText
+      ? conversations.filter(c => c.name.toLowerCase().includes(searchLower))
+      : conversations,
+    [conversations, searchText, searchLower],
+  );
 
-  const computed = scene ? computeTextColors(scene.color) : { textColor: '#1a1a1a', shadowColor: 'rgba(255,255,255,0.7)' };
-  const sceneStyle: React.CSSProperties = scene ? {
-    '--scene-color': scene.color,
-    '--scene-text-color': computed.textColor,
-    '--scene-shadow-color': computed.shadowColor,
-  } as React.CSSProperties : {};
+  const filteredServers = useMemo(
+    () => searchText
+      ? serverCategories
+          .map(cat => ({
+            ...cat,
+            items: cat.items.filter(item => item.name.toLowerCase().includes(searchLower)),
+          }))
+          .filter(cat => cat.items.length > 0)
+      : serverCategories,
+    [serverCategories, searchText, searchLower],
+  );
+
+  const whatsNewEntries = useMemo((): WhatsNewEntry[] => {
+    return conversations
+      .filter(c => !c.isGroupChat && (c.presence?.presence || c.presence?.customStatus))
+      .map(c => ({
+        name: c.name,
+        text: (c.presence!.customStatus || c.presence!.presence || '').trim() || `${c.presence?.status ?? 'Offline'}`,
+      }));
+  }, [conversations]);
+
+  const sceneStyle = useMemo((): React.CSSProperties => {
+    if (!scene) return {};
+    const computed = computeTextColors(scene.color);
+    return {
+      '--scene-color': scene.color,
+      '--scene-text-color': computed.textColor,
+      '--scene-shadow-color': computed.shadowColor,
+    } as React.CSSProperties;
+  }, [scene]);
 
   const showNews = settings?.displayHomeNews ?? true;
 
-  const sceneBgUrl = scene?.file ? assetUrl('scenes', scene.file) : '';
+  const sceneBgUrl = useMemo(
+    () => scene?.file ? assetUrl('scenes', scene.file) : '',
+    [scene?.file],
+  );
+
+  const PAGEOPEN_GIF_DURATION_MS = 1200;
+  const PAGECLOSE_GIF_DURATION_MS = 1000;
+
+  const handleCornerMouseEnter = useCallback(() => {
+    if (cornerCloseTimerRef.current) {
+      clearTimeout(cornerCloseTimerRef.current);
+      cornerCloseTimerRef.current = null;
+    }
+    setOpenHeld(false);
+    setCornerPhase('open');
+    openHeldTimerRef.current = setTimeout(() => {
+      setOpenHeld(true);
+      openHeldTimerRef.current = null;
+    }, PAGEOPEN_GIF_DURATION_MS);
+  }, []);
+
+  const handleCornerMouseLeave = useCallback(() => {
+    if (openHeldTimerRef.current) {
+      clearTimeout(openHeldTimerRef.current);
+      openHeldTimerRef.current = null;
+    }
+    setOpenHeld(false);
+    setCornerPhase('closing');
+    cornerCloseTimerRef.current = setTimeout(() => {
+      setCornerPhase('idle');
+      cornerCloseTimerRef.current = null;
+    }, PAGECLOSE_GIF_DURATION_MS);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (cornerCloseTimerRef.current) clearTimeout(cornerCloseTimerRef.current);
+      if (openHeldTimerRef.current) clearTimeout(openHeldTimerRef.current);
+    };
+  }, []);
+
+  const handleCornerClick = useCallback(() => {
+    if (cornerPhase !== 'idle') setShowScenePicker(true);
+  }, [cornerPhase]);
 
   return (
     <div className="wlm-window home-window" style={sceneStyle}>
+      <div
+        className="home-corner-hover-zone no-drag"
+        onMouseEnter={handleCornerMouseEnter}
+        onMouseLeave={handleCornerMouseLeave}
+        onClick={handleCornerClick}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => e.key === 'Enter' && handleCornerClick()}
+        aria-label="Open scene picker"
+      >
+        {cornerPhase !== 'idle' && (
+          <img
+            className="home-corner-gif"
+            src={
+              cornerPhase === 'open'
+                ? (openHeld ? assetUrl('images', 'home', 'pageopen-last.png') : assetUrl('images', 'home', 'pageopen.gif'))
+                : assetUrl('images', 'home', 'pageclose.gif')
+            }
+            alt=""
+            draggable={false}
+          />
+        )}
+      </div>
       <div className="home-scene-area">
         {sceneBgUrl && (
           <img className="scene-bg-image" src={sceneBgUrl} alt="" draggable={false} />
@@ -186,6 +396,10 @@ export const HomeApp: React.FC = () => {
         />
         <div className="home-scene-gradient">
           <div className="home-search no-drag">
+            <div className="home-search-separator" role="presentation">
+              <img src={assetUrl('images', 'home', 'Separator.png')} alt="" draggable={false} />
+            </div>
+            <div className="home-search-row">
             <div className="search-bar-wrapper">
               <input
                 type="text"
@@ -205,12 +419,18 @@ export const HomeApp: React.FC = () => {
               <button className="search-toolbar-btn" title="Add a contact" onClick={() => setShowAddFriend(true)}>
                 <img src={assetUrl('images', 'home', 'AddFriend.png')} alt="" draggable={false} />
               </button>
-              <button className="search-toolbar-btn" title="Change display layout">
+              <button className="search-toolbar-btn" title="Change display layout" onClick={() => window.aerocord.windows.openSettings()}>
                 <img src={assetUrl('images', 'home', 'ChangeLayout.png')} alt="" draggable={false} />
               </button>
-              <button className="search-toolbar-btn" title="Show menu">
-                <img src={assetUrl('images', 'home', 'ShowMenu.png')} alt="" draggable={false} />
-              </button>
+              <div className="search-toolbar-stack">
+                <button className="search-toolbar-btn search-toolbar-btn-mail" title="Mail" onClick={() => {}}>
+                  <img src={assetUrl('images', 'home', 'Home/Mail.png')} alt="" draggable={false} />
+                </button>
+                <button className="search-toolbar-btn" title="Show menu" onClick={() => window.aerocord.windows.openSettings()}>
+                  <img src={assetUrl('images', 'home', 'ShowMenu.png')} alt="" draggable={false} />
+                </button>
+              </div>
+            </div>
             </div>
           </div>
         </div>
@@ -226,6 +446,10 @@ export const HomeApp: React.FC = () => {
             onToggleFavorite={handleToggleFavorite}
             favoriteIds={favoriteIds}
             notifiedIds={notifiedChannels}
+            onCloseConversation={handleCloseConversation}
+            canCloseConversation={(item) => conversations.some(c => c.id === item.id)}
+            onRemoveFriend={handleRemoveFriend}
+            friendIds={friendIds}
           />
         )}
 
@@ -233,9 +457,12 @@ export const HomeApp: React.FC = () => {
           <ContactList
             title="Friend Requests"
             items={pendingRequests}
-            onDoubleClick={handleOpenChat}
+            onDoubleClick={handleOpenChatForUser}
             icon={assetUrl('images', 'home', 'AddFriend.png')}
             hideFavOption
+            contextMenuMode="friendRequests"
+            onAcceptFriendRequest={handleAcceptFriendRequest}
+            onIgnoreFriendRequest={handleIgnoreFriendRequest}
           />
         )}
 
@@ -246,6 +473,10 @@ export const HomeApp: React.FC = () => {
           onToggleFavorite={handleToggleFavorite}
           favoriteIds={favoriteIds}
           notifiedIds={notifiedChannels}
+          onCloseConversation={handleCloseConversation}
+          canCloseConversation={(item) => item.isGroupChat || item.recipientCount === 2}
+          onRemoveFriend={handleRemoveFriend}
+          friendIds={friendIds}
         />
         {filteredServers.map((cat, i) => (
           <ContactList
@@ -261,7 +492,7 @@ export const HomeApp: React.FC = () => {
         ))}
       </div>
 
-      <NewsTicker visible={showNews} />
+      <NewsTicker visible={showNews} whatsNewEntries={whatsNewEntries} />
 
       <div className="home-bottom-bar">
         <button className="wlm-toolbar-item no-drag" onClick={() => setShowScenePicker(true)}>

@@ -1,4 +1,6 @@
 import type { ForgeConfig } from '@electron-forge/shared-types';
+import * as path from 'path';
+import { spawnSync } from 'child_process';
 import { MakerSquirrel } from '@electron-forge/maker-squirrel';
 import { MakerZIP } from '@electron-forge/maker-zip';
 import { MakerDeb } from '@electron-forge/maker-deb';
@@ -11,13 +13,43 @@ import { FuseV1Options, FuseVersion } from '@electron/fuses';
 import { mainConfig } from './webpack.main.config';
 import { rendererConfig } from './webpack.renderer.config';
 
+const appIconPath = path.join(__dirname, 'src', 'assets', 'images', 'icons', 'MainWnd');
+const pythonDir = path.join(__dirname, 'python');
+
 const config: ForgeConfig = {
+  hooks: {
+    prePackage: async () => {
+      const python = process.platform === 'win32' ? 'python' : 'python3';
+      const pipInstall = spawnSync(python, ['-m', 'pip', 'install', '-r', 'requirements.txt'], {
+        cwd: pythonDir,
+        stdio: 'inherit',
+      });
+      if (pipInstall.status !== 0) {
+        throw new Error(`pip install -r requirements.txt failed with code ${pipInstall.status}`);
+      }
+      const build = spawnSync(python, ['build.py'], {
+        cwd: pythonDir,
+        stdio: 'inherit',
+      });
+      if (build.status !== 0) {
+        throw new Error(`Python bridge build failed with code ${build.status}`);
+      }
+    },
+  },
   packagerConfig: {
     asar: true,
+    icon: appIconPath,
+    extraResource: [
+      './python/dist/aerocord_bridge',
+      './src/assets',
+      './src/assets/images/icons/MainWnd.ico',
+    ],
   },
   rebuildConfig: {},
   makers: [
-    new MakerSquirrel({}),
+    new MakerSquirrel({
+      setupIcon: path.join(__dirname, 'src', 'assets', 'images', 'icons', 'MainWnd.ico'),
+    }),
     new MakerZIP({}, ['darwin']),
     new MakerRpm({}),
     new MakerDeb({}),

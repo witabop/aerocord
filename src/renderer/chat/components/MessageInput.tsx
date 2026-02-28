@@ -4,9 +4,72 @@ import type { MessageVM, UserVM } from '../../shared/types';
 import { EmojiBoard } from './EmojiBoard';
 import { GifBoard } from './GifBoard';
 
-interface MessageInputProps {
-  onSend: (content: string) => void;
+export interface PendingAttachment {
+  id: string;
+  path: string;
+  name: string;
+}
+
+const closeIconUrl = assetUrl('images', 'notification', 'Close.png');
+const closeIconHoverUrl = assetUrl('images', 'notification', 'CloseHover.png');
+
+function AttachmentThumbnail({
+  attachment,
+  onRemove,
+  disabled,
+}: {
+  attachment: PendingAttachment;
+  onRemove: () => void;
+  disabled: boolean;
+}) {
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [closeHover, setCloseHover] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    window.aerocord.files.getPreviewDataUrl(attachment.path).then((url) => {
+      if (!cancelled) setPreviewUrl(url);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [attachment.path]);
+  const isImage = !!previewUrl;
+  return (
+    <div className="chat-attachment-thumb">
+      {isImage ? (
+        <img src={previewUrl} alt="" className="chat-attachment-thumb-img" draggable={false} />
+      ) : (
+        <div className="chat-attachment-thumb-file">
+          <span className="chat-attachment-thumb-file-icon">📎</span>
+          <span className="chat-attachment-thumb-file-name" title={attachment.name}>{attachment.name}</span>
+        </div>
+      )}
+      {!disabled && (
+        <button
+          type="button"
+          className="chat-attachment-thumb-remove"
+          onClick={onRemove}
+          onMouseEnter={() => setCloseHover(true)}
+          onMouseLeave={() => setCloseHover(false)}
+          title="Remove"
+          aria-label="Remove attachment"
+        >
+          <img src={closeHover ? closeIconHoverUrl : closeIconUrl} alt="" draggable={false} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+export interface MessageInputProps {
+  onSend: (content: string, attachmentPaths?: string[]) => void;
   onSendGif?: (filename: string) => void;
+  pendingAttachments?: PendingAttachment[];
+  onAddAttachments?: (filePaths: string[]) => void;
+  onRemoveAttachment?: (id: string) => void;
+  onClearAttachments?: () => void;
+  onUploadError?: (message: string) => void;
+  maxFileSizeBytes?: number;
   onTyping: () => void;
   replyTarget: MessageVM | null;
   onCancelReply: () => void;
@@ -24,6 +87,12 @@ interface MentionSuggestion {
 export const MessageInput: React.FC<MessageInputProps> = ({
   onSend,
   onSendGif,
+  pendingAttachments = [],
+  onAddAttachments,
+  onRemoveAttachment,
+  onClearAttachments,
+  onUploadError,
+  maxFileSizeBytes = 8 * 1024 * 1024,
   onTyping,
   replyTarget,
   onCancelReply,
@@ -105,15 +174,17 @@ export const MessageInput: React.FC<MessageInputProps> = ({
 
   const handleSend = useCallback(() => {
     const trimmed = text.trim();
-    if (!trimmed) return;
-    onSend(trimmed);
+    const paths = pendingAttachments.map((a) => a.path);
+    if (!trimmed && paths.length === 0) return;
+    onSend(trimmed || '\u200B', paths.length ? paths : undefined);
     setText('');
     setSuggestions([]);
     setMentionQuery(null);
+    onClearAttachments?.();
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
-  }, [text, onSend]);
+  }, [text, pendingAttachments, onSend, onClearAttachments]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (suggestions.length > 0) {
@@ -167,6 +238,48 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     }
   }, [text, updateMentionQuery]);
 
+  const handlePaste = useCallback(
+    async (e: React.ClipboardEvent) => {
+      const files = e.clipboardData?.files;
+      if (!files?.length || !onAddAttachments || disabled) return;
+      const maxSize = maxFileSizeBytes;
+      const paths: string[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (file.size > maxSize) {
+          onUploadError?.('Files must be 8MB or smaller.');
+          return;
+        }
+        const pathProp = (file as File & { path?: string }).path;
+        if (pathProp) {
+          paths.push(pathProp);
+        } else {
+          try {
+            const buf = await file.arrayBuffer();
+            const bytes = new Uint8Array(buf);
+            let binary = '';
+            const chunk = 8192;
+            for (let i = 0; i < bytes.length; i += chunk) {
+              binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+            }
+            const base64 = btoa(binary);
+            const ext = file.name?.split('.').pop() || (file.type?.startsWith('image/') ? 'png' : 'bin');
+            const tempPath = await window.aerocord.files.writeTemp(base64, ext);
+            paths.push(tempPath);
+          } catch {
+            onUploadError?.('Failed to paste file.');
+            return;
+          }
+        }
+      }
+      if (paths.length) {
+        e.preventDefault();
+        onAddAttachments(paths);
+      }
+    },
+    [onAddAttachments, onUploadError, disabled, maxFileSizeBytes]
+  );
+
   useEffect(() => {
     if (replyTarget) {
       textareaRef.current?.focus();
@@ -201,6 +314,19 @@ export const MessageInput: React.FC<MessageInputProps> = ({
         </div>
       )}
 
+      {pendingAttachments.length > 0 && (
+        <div className="chat-attachment-strip">
+          {pendingAttachments.map((att) => (
+            <AttachmentThumbnail
+              key={att.id}
+              attachment={att}
+              onRemove={() => onRemoveAttachment?.(att.id)}
+              disabled={disabled}
+            />
+          ))}
+        </div>
+      )}
+
       <div className="chat-input-box-wrapper">
         <textarea
           ref={textareaRef}
@@ -209,6 +335,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
           onChange={handleInput}
           onKeyDown={handleKeyDown}
           onClick={handleClick}
+          onPaste={handlePaste}
           disabled={disabled}
           rows={1}
         />

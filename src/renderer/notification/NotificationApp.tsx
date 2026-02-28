@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { StatusAvatar } from '../shared/components/StatusAvatar';
 import { assetUrl } from '../shared/hooks/useAssets';
 import type { NotificationData } from '../shared/types';
@@ -14,10 +14,15 @@ function getNotificationData(): NotificationData | null {
   }
 }
 
+const closeIconUrl = assetUrl('images', 'notification', 'Close.png');
+const closeIconHoverUrl = assetUrl('images', 'notification', 'CloseHover.png');
+
 export const NotificationApp: React.FC = () => {
   const [data] = useState<NotificationData | null>(() => getNotificationData());
   const [visible, setVisible] = useState(true);
   const [isClosing, setIsClosing] = useState(false);
+  const [closeHover, setCloseHover] = useState(false);
+  const hasClosedRef = useRef(false);
 
   useEffect(() => {
     const timer = setTimeout(() => setIsClosing(true), 7000);
@@ -40,7 +45,8 @@ export const NotificationApp: React.FC = () => {
   }, []);
 
   const handleAnimationEnd = useCallback((e: React.AnimationEvent<HTMLDivElement>) => {
-    if (e.animationName === 'notification-slide-out') {
+    if (e.animationName === 'notification-slide-out' && !hasClosedRef.current) {
+      hasClosedRef.current = true;
       closeWindow();
     }
   }, [closeWindow]);
@@ -68,7 +74,15 @@ export const NotificationApp: React.FC = () => {
       >
         {sceneBg && <img className="notif-scene-bg" src={sceneBg} alt="" draggable={false} />}
         {notifHeader}
-        <button className="notification-close" onClick={(e) => { e.stopPropagation(); handleClose(); }}>&#x2715;</button>
+        <button
+          className="notification-close"
+          onClick={(e) => { e.stopPropagation(); handleClose(); }}
+          onMouseEnter={() => setCloseHover(true)}
+          onMouseLeave={() => setCloseHover(false)}
+          aria-label="Close"
+        >
+          <img src={closeHover ? closeIconHoverUrl : closeIconUrl} alt="" draggable={false} />
+        </button>
         <div className="notification-content">
           <StatusAvatar
             src={data.user?.avatar || ''}
@@ -94,7 +108,15 @@ export const NotificationApp: React.FC = () => {
     >
       {sceneBg && <img className="notif-scene-bg" src={sceneBg} alt="" draggable={false} />}
       {notifHeader}
-      <button className="notification-close" onClick={(e) => { e.stopPropagation(); handleClose(); }}>&#x2715;</button>
+      <button
+        className="notification-close"
+        onClick={(e) => { e.stopPropagation(); handleClose(); }}
+        onMouseEnter={() => setCloseHover(true)}
+        onMouseLeave={() => setCloseHover(false)}
+        aria-label="Close"
+      >
+        <img src={closeHover ? closeIconHoverUrl : closeIconUrl} alt="" draggable={false} />
+      </button>
       <div className="notification-content">
         <StatusAvatar
           src={data.message?.author?.avatar || ''}

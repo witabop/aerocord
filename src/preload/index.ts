@@ -17,7 +17,13 @@ const api = {
   contacts: {
     getPrivateChannels: () => ipcRenderer.invoke(IPC.CONTACTS_GET_PRIVATE_CHANNELS),
     getGuilds: () => ipcRenderer.invoke(IPC.CONTACTS_GET_GUILDS),
+    sendFriendRequest: (username: string) =>
+      ipcRenderer.invoke(IPC.CONTACTS_SEND_FRIEND_REQUEST, username) as Promise<{ success: boolean; error?: string }>,
     getPendingRequests: () => ipcRenderer.invoke(IPC.CONTACTS_GET_PENDING_REQUESTS),
+    acceptFriendRequest: (userId: string) => ipcRenderer.invoke(IPC.CONTACTS_ACCEPT_FRIEND_REQUEST, userId),
+    ignoreFriendRequest: (userId: string) => ipcRenderer.invoke(IPC.CONTACTS_IGNORE_FRIEND_REQUEST, userId),
+    getFriends: () => ipcRenderer.invoke(IPC.CONTACTS_GET_FRIENDS) as Promise<string[]>,
+    removeFriend: (userId: string) => ipcRenderer.invoke(IPC.CONTACTS_REMOVE_FRIEND, userId) as Promise<{ success: boolean; error?: string }>,
     getFavorites: () => ipcRenderer.invoke(IPC.CONTACTS_GET_FAVORITES),
     setFavorites: (ids: string[]) => ipcRenderer.invoke(IPC.CONTACTS_SET_FAVORITES, ids),
   },
@@ -30,21 +36,34 @@ const api = {
     delete: (channelId: string, messageId: string) =>
       ipcRenderer.invoke(IPC.MESSAGES_DELETE, channelId, messageId),
     triggerTyping: (channelId: string) => ipcRenderer.invoke(IPC.MESSAGES_TRIGGER_TYPING, channelId),
+    ack: (channelId: string, messageId: string) => ipcRenderer.invoke(IPC.MESSAGES_ACK, channelId, messageId),
   },
   channels: {
     get: (channelId: string) => ipcRenderer.invoke(IPC.CHANNELS_GET, channelId),
     getGuildChannels: (guildId: string) => ipcRenderer.invoke(IPC.CHANNELS_GET_GUILD_CHANNELS, guildId),
     getMembers: (channelId: string) => ipcRenderer.invoke(IPC.CHANNELS_GET_MEMBERS, channelId),
+    getOrCreateDM: (userId: string) => ipcRenderer.invoke(IPC.CHANNELS_GET_OR_CREATE_DM, userId) as Promise<string>,
+    closeConversation: (channelId: string) => ipcRenderer.invoke(IPC.CHANNELS_CLOSE_CONVERSATION, channelId) as Promise<{ success: boolean; error?: string }>,
   },
   voice: {
     join: (channelId: string) => ipcRenderer.invoke(IPC.VOICE_JOIN, channelId),
     leave: () => ipcRenderer.invoke(IPC.VOICE_LEAVE),
     setSelfMute: (muted: boolean) => ipcRenderer.invoke(IPC.VOICE_SET_SELF_MUTE, muted),
     setSelfDeafen: (deafened: boolean) => ipcRenderer.invoke(IPC.VOICE_SET_SELF_DEAFEN, deafened),
+    setInputVolume: (volume: number) => ipcRenderer.invoke(IPC.VOICE_SET_INPUT_VOLUME, volume),
+    getInputVolume: () => ipcRenderer.invoke(IPC.VOICE_GET_INPUT_VOLUME) as Promise<number>,
     setUserVolume: (userId: string, volume: number) =>
       ipcRenderer.invoke(IPC.VOICE_SET_USER_VOLUME, userId, volume),
+    getUserVolume: (userId: string) => ipcRenderer.invoke(IPC.VOICE_GET_USER_VOLUME, userId) as Promise<number>,
+    setUserMuted: (userId: string, muted: boolean) =>
+      ipcRenderer.invoke(IPC.VOICE_SET_USER_MUTED, userId, muted),
+    getUserMuted: (userId: string) => ipcRenderer.invoke(IPC.VOICE_GET_USER_MUTED, userId) as Promise<boolean>,
     getVoiceStates: (guildId: string) => ipcRenderer.invoke(IPC.VOICE_GET_STATES, guildId),
-    sendAudioChunk: (chunk: ArrayBuffer) => ipcRenderer.send(IPC.VOICE_AUDIO_CHUNK, Buffer.from(chunk).toString('base64')),
+    sendAudioChunk: (chunk: ArrayBuffer) => ipcRenderer.send(IPC.VOICE_AUDIO_CHUNK, Buffer.from(chunk)),
+    startCall: (channelId: string) => ipcRenderer.invoke(IPC.CALL_START, channelId) as Promise<boolean>,
+    acceptCall: (channelId: string) => ipcRenderer.invoke(IPC.CALL_ACCEPT, channelId) as Promise<boolean>,
+    declineCall: (channelId: string) => ipcRenderer.invoke(IPC.CALL_DECLINE, channelId) as Promise<void>,
+    getCallState: () => ipcRenderer.invoke(IPC.CALL_GET_STATE) as Promise<{ callState: string; callChannelId: string | null }>,
   },
   settings: {
     get: () => ipcRenderer.invoke(IPC.SETTINGS_GET),
@@ -58,6 +77,21 @@ const api = {
   assets: {
     getPath: () => ipcRenderer.invoke(IPC.ASSETS_GET_PATH),
     listGifs: () => ipcRenderer.invoke(IPC.ASSETS_LIST_GIFS) as Promise<string[]>,
+  },
+  dialog: {
+    pickFiles: (options: { type: 'images' | 'files'; maxSizeBytes?: number }) =>
+      ipcRenderer.invoke(IPC.DIALOG_PICK_FILES, options) as Promise<
+        { ok: true; filePaths: string[] } | { ok: false; error: 'FILE_TOO_LARGE'; filePaths: string[] }
+      >,
+  },
+  files: {
+    writeTemp: (base64: string, extension: string) =>
+      ipcRenderer.invoke(IPC.FILES_WRITE_TEMP, base64, extension) as Promise<string>,
+    getPreviewDataUrl: (filePath: string) =>
+      ipcRenderer.invoke(IPC.FILES_GET_PREVIEW_DATA_URL, filePath) as Promise<string | null>,
+  },
+  shell: {
+    openExternal: (url: string) => ipcRenderer.invoke(IPC.SHELL_OPEN_EXTERNAL, url) as Promise<void>,
   },
   windows: {
     openChat: (channelId: string) => ipcRenderer.invoke(IPC.WINDOW_OPEN_CHAT, channelId),

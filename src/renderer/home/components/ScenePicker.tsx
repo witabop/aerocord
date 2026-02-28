@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { assetUrl } from '../../shared/hooks/useAssets';
 import type { SceneVM } from '../../shared/types';
 
 interface ScenePickerProps {
@@ -43,7 +44,14 @@ export const ScenePicker: React.FC<ScenePickerProps> = ({ visible, onClose, onSc
             >
               <div
                 className="scene-picker-swatch"
-                style={{ backgroundColor: scene.color }}
+                style={{
+                  backgroundColor: scene.color,
+                  ...(scene.file
+                    ? {
+                        backgroundImage: `url(${assetUrl('scenes', scene.file)})`,
+                      }
+                    : {}),
+                }}
               />
               <span className="scene-picker-name">{scene.displayName}</span>
             </div>

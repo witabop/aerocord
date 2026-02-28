@@ -1,0 +1,95 @@
+.image-lightbox-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  z-index: 2147483647;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  box-sizing: border-box;
+}
+
+/* Outer border: slightly thicker dark black around the entire preview modal */
+.image-lightbox-window {
+  display: flex;
+  flex-direction: column;
+  max-width: 95vw;
+  max-height: 95vh;
+  background: #000;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  position: relative;
+  border: 2px solid #000;
+}
+
+.image-lightbox-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 28px;
+  height: 17px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.image-lightbox-close img {
+  display: block;
+  pointer-events: none;
+}
+
+/* Inner border: thin black around the image content only */
+.image-lightbox-content {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  background: #000;
+  border: 1px solid #000;
+  margin: 0;
+  position: relative;
+}
+
+.image-lightbox-img {
+  max-width: 100%;
+  max-height: calc(95vh - 80px);
+  object-fit: contain;
+  vertical-align: middle;
+  display: block;
+}
+
+/* Bottom bar: dark blue-grey, like the reference */
+.image-lightbox-bar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 8px 12px;
+  background: #4a5568;
+  min-height: 36px;
+  border: none;
+}
+
+.image-lightbox-open-browser {
+  width: 20px;
+  height: 19px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.image-lightbox-open-browser img {
+  display: block;
+  pointer-events: none;
+}

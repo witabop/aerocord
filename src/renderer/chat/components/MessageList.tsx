@@ -2,6 +2,7 @@ import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { assetUrl } from '../../shared/hooks/useAssets';
 import { splitByEmojiCodes, getEmojiFileForCode } from '../../shared/emojiCodes';
 import type { MessageVM } from '../../shared/types';
+import { ImageLightbox } from './ImageLightbox';
 
 interface MessageListProps {
   messages: MessageVM[];
@@ -35,22 +36,50 @@ function isImageAttachment(contentType?: string, filename?: string): boolean {
   return false;
 }
 
+/** Matches http(s) URLs for linkification. */
+const URL_REGEX = /(https?:\/\/[^\s<>"']+)/g;
+
+function splitByUrls(text: string): Array<{ type: 'text' | 'url'; value: string }> {
+  const parts: Array<{ type: 'text' | 'url'; value: string }> = [];
+  let lastIndex = 0;
+  let m: RegExpExecArray | null;
+  URL_REGEX.lastIndex = 0;
+  while ((m = URL_REGEX.exec(text)) !== null) {
+    if (m.index > lastIndex) {
+      parts.push({ type: 'text', value: text.slice(lastIndex, m.index) });
+    }
+    parts.push({ type: 'url', value: m[1] });
+    lastIndex = m.index + m[1].length;
+  }
+  if (lastIndex < text.length) {
+    parts.push({ type: 'text', value: text.slice(lastIndex) });
+  }
+  return parts.length ? parts : [{ type: 'text', value: text }];
+}
+
 function renderContentWithMentions(
   content: string,
   onUserClick?: (userId: string, x: number, y: number) => void,
   mentions?: { id: string; name: string }[],
+  mentionRoles?: { id: string; name: string }[],
 ): React.ReactNode {
-  if (!mentions || mentions.length === 0) return content;
+  const userMentions = mentions ?? [];
+  const roleMentions = mentionRoles ?? [];
+  const allMentionNames = [
+    ...userMentions.map(m => `@${m.name}`),
+    ...roleMentions.map(r => `@${r.name}`),
+  ];
+  if (allMentionNames.length === 0) return content;
 
-  const mentionNames = mentions.map(m => `@${m.name}`);
-  const mentionMap = new Map(mentions.map(m => [`@${m.name}`, m.id]));
+  const userMentionMap = new Map(userMentions.map(m => [`@${m.name}`, m.id]));
+  const roleMentionSet = new Set(roleMentions.map(r => `@${r.name}`));
 
-  const escaped = mentionNames.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const escaped = allMentionNames.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
   const regex = new RegExp(`(${escaped.join('|')})`, 'g');
 
   const parts = content.split(regex);
   return parts.map((part, i) => {
-    const userId = mentionMap.get(part);
+    const userId = userMentionMap.get(part);
     if (userId) {
       return (
         <span
@@ -58,6 +87,13 @@ function renderContentWithMentions(
           className="chat-mention-badge"
           onClick={(e) => onUserClick?.(userId, e.clientX, e.clientY)}
         >
+          {part}
+        </span>
+      );
+    }
+    if (roleMentionSet.has(part)) {
+      return (
+        <span key={i} className="chat-mention-badge">
           {part}
         </span>
       );
@@ -70,6 +106,7 @@ function renderMessageContent(
   content: string,
   onUserClick?: (userId: string, x: number, y: number) => void,
   mentions?: { id: string; name: string }[],
+  mentionRoles?: { id: string; name: string }[],
 ): React.ReactNode {
   const segments = splitByEmojiCodes(content);
   return segments.map((seg, i) => {
@@ -88,7 +125,30 @@ function renderMessageContent(
         );
       }
     }
-    return <React.Fragment key={i}>{renderContentWithMentions(seg.value, onUserClick, mentions)}</React.Fragment>;
+    const urlParts = splitByUrls(seg.value);
+    return (
+      <React.Fragment key={i}>
+        {urlParts.map((part, j) =>
+          part.type === 'url' ? (
+            <a
+              key={j}
+              href={part.value}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="chat-message-link"
+              onClick={(e) => {
+                e.preventDefault();
+                window.aerocord?.shell?.openExternal(part.value);
+              }}
+            >
+              {part.value}
+            </a>
+          ) : (
+            <React.Fragment key={j}>{renderContentWithMentions(part.value, onUserClick, mentions, mentionRoles)}</React.Fragment>
+          ),
+        )}
+      </React.Fragment>
+    );
   });
 }
 
@@ -111,7 +171,9 @@ export const MessageList: React.FC<MessageListProps> = ({
   const [ctxMenu, setCtxMenu] = useState<ContextMenu | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const editRef = useRef<HTMLTextAreaElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (editingId && editRef.current) editRef.current.focus();
@@ -122,6 +184,14 @@ export const MessageList: React.FC<MessageListProps> = ({
     window.addEventListener('click', close);
     return () => window.removeEventListener('click', close);
   }, []);
+
+  useEffect(() => {
+    if (!ctxMenu || !scrollContainerRef.current) return;
+    const el = scrollContainerRef.current;
+    const onScroll = () => setCtxMenu(null);
+    el.addEventListener('scroll', onScroll);
+    return () => el.removeEventListener('scroll', onScroll);
+  }, [ctxMenu]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent, msg: MessageVM, isOwn: boolean) => {
     e.preventDefault();
@@ -163,7 +233,7 @@ export const MessageList: React.FC<MessageListProps> = ({
   }, [ctxMenu, onDelete]);
 
   return (
-    <div className="chat-messages">
+    <div className="chat-messages" ref={scrollContainerRef}>
       {messages.map((msg, i) => {
         const showHeader = shouldShowHeader(msg, messages[i - 1]);
         const isOwn = msg.author.id === currentUserId;
@@ -220,7 +290,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                 </div>
               </div>
             ) : (
-              msg.content && <div className="chat-message-content">{renderMessageContent(msg.content, onUserClick, msg.mentions)}</div>
+              msg.content && <div className="chat-message-content">{renderMessageContent(msg.content, onUserClick, msg.mentions, msg.mentionRoles)}</div>
             )}
 
             {msg.attachments.length > 0 && (
@@ -232,6 +302,10 @@ export const MessageList: React.FC<MessageListProps> = ({
                       className="chat-message-attachment-image"
                       src={att.url}
                       alt={att.filename}
+                      onClick={() => setLightboxUrl(att.url)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => e.key === 'Enter' && setLightboxUrl(att.url)}
                     />
                   ) : (
                     <a
@@ -263,10 +337,26 @@ export const MessageList: React.FC<MessageListProps> = ({
                   <div className="chat-embed-description">{embed.description}</div>
                 )}
                 {embed.image && (
-                  <img className="chat-embed-image" src={embed.image.url} alt="" />
+                  <img
+                    className="chat-embed-image chat-embed-image-clickable"
+                    src={embed.image.url}
+                    alt=""
+                    onClick={() => setLightboxUrl(embed.image!.url)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => e.key === 'Enter' && embed.image && setLightboxUrl(embed.image.url)}
+                  />
                 )}
                 {embed.thumbnail && !embed.image && (
-                  <img className="chat-embed-image" src={embed.thumbnail.url} alt="" />
+                  <img
+                    className="chat-embed-image chat-embed-image-clickable"
+                    src={embed.thumbnail.url}
+                    alt=""
+                    onClick={() => setLightboxUrl(embed.thumbnail!.url)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => e.key === 'Enter' && embed.thumbnail && setLightboxUrl(embed.thumbnail.url)}
+                  />
                 )}
               </div>
             ))}
@@ -289,6 +379,10 @@ export const MessageList: React.FC<MessageListProps> = ({
             </>
           )}
         </div>
+      )}
+
+      {lightboxUrl && (
+        <ImageLightbox imageUrl={lightboxUrl} onClose={() => setLightboxUrl(null)} />
       )}
     </div>
   );

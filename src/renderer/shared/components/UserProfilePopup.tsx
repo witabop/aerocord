@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { StatusAvatar } from './StatusAvatar';
+import { assetUrl } from '../hooks/useAssets';
 import type { UserProfileVM } from '../types';
 import './UserProfilePopup.css';
 
@@ -12,14 +13,32 @@ interface UserProfilePopupProps {
 export const UserProfilePopup: React.FC<UserProfilePopupProps> = ({ userId, position, onClose }) => {
   const [profile, setProfile] = useState<UserProfileVM | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isFriend, setIsFriend] = useState(false);
+  const [hoverFriendIcon, setHoverFriendIcon] = useState(false);
+  const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
+  const [removing, setRemoving] = useState(false);
 
   useEffect(() => {
     setLoading(true);
-    window.aerocord.user.getProfile(userId).then(p => {
+    setShowRemoveConfirm(false);
+    Promise.all([
+      window.aerocord.user.getProfile(userId),
+      window.aerocord.contacts.getFriends(),
+    ]).then(([p, friendIds]) => {
       setProfile(p);
+      setIsFriend(Array.isArray(friendIds) && friendIds.includes(userId));
       setLoading(false);
     });
   }, [userId]);
+
+  const handleRemoveFriend = useCallback(async () => {
+    setRemoving(true);
+    const result = await window.aerocord.contacts.removeFriend(userId);
+    setRemoving(false);
+    if (result?.success) {
+      onClose();
+    }
+  }, [userId, onClose]);
 
   const handleOverlayClick = useCallback((e: React.MouseEvent) => {
     if (e.target === e.currentTarget) onClose();
@@ -45,6 +64,36 @@ export const UserProfilePopup: React.FC<UserProfilePopupProps> = ({ userId, posi
           <div className="profile-popup-loading">Loading...</div>
         ) : profile ? (
           <>
+            {isFriend && (
+              <div className="profile-popup-friend-area">
+                <div
+                  className="profile-popup-friend-icon-wrap"
+                  onMouseEnter={() => setHoverFriendIcon(true)}
+                  onMouseLeave={() => { setHoverFriendIcon(false); setShowRemoveConfirm(false); }}
+                >
+                  <img
+                    className="profile-popup-friend-icon"
+                    src={assetUrl('images', 'icons', 'friend.ico')}
+                    alt="Friend"
+                    draggable={false}
+                    onClick={() => setShowRemoveConfirm(prev => !prev)}
+                  />
+                  {hoverFriendIcon && !showRemoveConfirm && (
+                    <div className="profile-popup-friend-tooltip">Friend</div>
+                  )}
+                  {showRemoveConfirm && (
+                    <button
+                      type="button"
+                      className="profile-popup-remove-friend-btn"
+                      onClick={handleRemoveFriend}
+                      disabled={removing}
+                    >
+                      {removing ? 'Removing...' : 'Remove friend?'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
             {profile.bannerUrl && (
               <img className="profile-popup-scene-bg" src={profile.bannerUrl} alt="" draggable={false} />
             )}
@@ -52,12 +101,12 @@ export const UserProfilePopup: React.FC<UserProfilePopupProps> = ({ userId, posi
               <StatusAvatar
                 src={profile.avatar}
                 status={profile.presence?.status || 'Offline'}
-                size="large"
+                size="xl"
               />
             </div>
             <div className="profile-popup-body">
               <div className="profile-popup-name">{profile.name}</div>
-              <div className="profile-popup-username">{profile.username}</div>
+              <div className="profile-popup-username">{profile.username}@discord.com</div>
               {profile.presence?.customStatus && (
                 <div className="profile-popup-custom-status">{profile.presence.customStatus}</div>
               )}

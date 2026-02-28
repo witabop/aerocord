@@ -36,7 +36,14 @@ export interface MessageVM {
   embeds: EmbedVM[];
   type: string;
   mentions: MentionVM[];
+  mentionRoles?: MentionVM[];
   mentionsSelf: boolean;
+  /** True if message is from a DM or group DM (so we show notification for any message from others). */
+  isDirectMessage?: boolean;
+  /** Channel id to show notification on in home list (for guilds: first channel id of that server; for DMs: channel id). */
+  notifyEntryId?: string;
+  /** True if a chat window for this entry is already open (don't show notification icon). */
+  notifyEntryOpen?: boolean;
 }
 
 export interface AttachmentVM {
@@ -156,6 +163,7 @@ export interface SettingsData {
   displayAds: boolean;
   displayAerochatAttribution: boolean;
   displayLinkPreviews: boolean;
+  showMemberList: boolean;
   selectedTimeFormat: '24h' | '12h';
   discordDeveloperMode: boolean;
   inputDeviceIndex: number;
@@ -186,6 +194,8 @@ export interface UserProfileVM {
 
 export type LoginStatus = 'success' | 'unauthorized' | 'badRequest' | 'serverError' | 'unknown';
 
+export type DmCallState = 'idle' | 'outgoing' | 'incoming' | 'active';
+
 export interface AerocordAPI {
   auth: {
     login(token: string, save: boolean, status: string): Promise<LoginStatus>;
@@ -203,29 +213,45 @@ export interface AerocordAPI {
     getGuilds(): Promise<HomeListCategoryVM[]>;
     sendFriendRequest(username: string): Promise<{ success: boolean; error?: string }>;
     getPendingRequests(): Promise<HomeListItemVM[]>;
+    acceptFriendRequest(userId: string): Promise<{ success: boolean; error?: string }>;
+    ignoreFriendRequest(userId: string): Promise<{ success: boolean; error?: string }>;
+    getFriends(): Promise<string[]>;
+    removeFriend(userId: string): Promise<{ success: boolean; error?: string }>;
     getFavorites(): Promise<string[]>;
     setFavorites(ids: string[]): Promise<void>;
   };
   messages: {
     get(channelId: string): Promise<MessageVM[]>;
-    send(channelId: string, content: string, attachmentPaths?: string[]): Promise<boolean>;
+    send(channelId: string, content: string, attachmentPaths?: string[]): Promise<{ success: boolean; error?: string }>;
     edit(channelId: string, messageId: string, content: string): Promise<boolean>;
     delete(channelId: string, messageId: string): Promise<boolean>;
     triggerTyping(channelId: string): Promise<void>;
+    ack(channelId: string, messageId: string): Promise<void>;
   };
   channels: {
     get(channelId: string): Promise<ChannelVM | null>;
     getGuildChannels(guildId: string): Promise<ChannelVM[]>;
     getMembers(channelId: string): Promise<UserVM[]>;
+    getOrCreateDM(userId: string): Promise<string>;
+    closeConversation(channelId: string): Promise<{ success: boolean; error?: string }>;
   };
   voice: {
     join(channelId: string): Promise<boolean>;
     leave(): Promise<void>;
     setSelfMute(muted: boolean): Promise<void>;
     setSelfDeafen(deafened: boolean): Promise<void>;
+    setInputVolume(volume: number): Promise<void>;
+    getInputVolume(): Promise<number>;
     setUserVolume(userId: string, volume: number): Promise<void>;
+    getUserVolume(userId: string): Promise<number>;
+    setUserMuted(userId: string, muted: boolean): Promise<void>;
+    getUserMuted(userId: string): Promise<boolean>;
     getVoiceStates(guildId: string): Promise<VoiceChannelStateVM[]>;
     sendAudioChunk(chunk: ArrayBuffer): void;
+    startCall(channelId: string): Promise<boolean>;
+    acceptCall(channelId: string): Promise<boolean>;
+    declineCall(channelId: string): Promise<void>;
+    getCallState(): Promise<{ callState: string; callChannelId: string | null }>;
   };
   settings: {
     get(): Promise<SettingsData>;
@@ -239,6 +265,18 @@ export interface AerocordAPI {
   assets: {
     getPath(): Promise<string>;
     listGifs(): Promise<string[]>;
+  };
+  dialog: {
+    pickFiles(options: { type: 'images' | 'files'; maxSizeBytes?: number }): Promise<
+      { ok: true; filePaths: string[] } | { ok: false; error: 'FILE_TOO_LARGE'; filePaths: string[] }
+    >;
+  };
+  files: {
+    writeTemp(base64: string, extension: string): Promise<string>;
+    getPreviewDataUrl(filePath: string): Promise<string | null>;
+  };
+  shell: {
+    openExternal(url: string): Promise<void>;
   };
   windows: {
     openChat(channelId: string): Promise<void>;

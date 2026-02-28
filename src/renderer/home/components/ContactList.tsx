@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { assetUrl } from '../../shared/hooks/useAssets';
 import type { HomeListItemVM } from '../../shared/types';
 
@@ -12,6 +12,18 @@ interface ContactListProps {
   favoriteIds?: Set<string>;
   hideFavOption?: boolean;
   notifiedIds?: Set<string>;
+  /** When 'friendRequests', context menu shows Accept / Ignore instead of Favorites */
+  contextMenuMode?: 'favorites' | 'friendRequests';
+  onAcceptFriendRequest?: (userId: string) => void;
+  onIgnoreFriendRequest?: (userId: string) => void;
+  /** When set, context menu includes "Close conversation" for items where this returns true (e.g. DMs only, not servers/groups). */
+  onCloseConversation?: (channelId: string) => void;
+  /** When onCloseConversation is set, only show "Close conversation" for items where this returns true. Default: all. */
+  canCloseConversation?: (item: HomeListItemVM) => boolean;
+  /** When set, context menu includes "Remove friend" for DMs where the other user is in friendIds. */
+  onRemoveFriend?: (userId: string) => void;
+  /** Set of user ids that are friends (used with onRemoveFriend). */
+  friendIds?: Set<string>;
 }
 
 interface CtxMenu {
@@ -43,16 +55,39 @@ export const ContactList: React.FC<ContactListProps> = ({
   favoriteIds,
   hideFavOption,
   notifiedIds,
+  contextMenuMode,
+  onAcceptFriendRequest,
+  onIgnoreFriendRequest,
+  onCloseConversation,
+  canCloseConversation,
+  onRemoveFriend,
+  friendIds,
 }) => {
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [ctxMenu, setCtxMenu] = useState<CtxMenu | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const close = () => setCtxMenu(null);
     window.addEventListener('click', close);
     return () => window.removeEventListener('click', close);
   }, []);
+
+  useEffect(() => {
+    if (!ctxMenu || !rootRef.current) return;
+    let el: HTMLElement | null = rootRef.current;
+    while (el) {
+      const style = getComputedStyle(el);
+      const ov = style.overflowY || style.overflow;
+      if (ov === 'auto' || ov === 'scroll') {
+        const onScroll = () => setCtxMenu(null);
+        el.addEventListener('scroll', onScroll);
+        return () => el?.removeEventListener('scroll', onScroll);
+      }
+      el = el.parentElement;
+    }
+  }, [ctxMenu]);
 
   const handleItemClick = useCallback((id: string) => {
     setSelectedId(id);
@@ -63,11 +98,11 @@ export const ContactList: React.FC<ContactListProps> = ({
   }, [onDoubleClick]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent, itemId: string) => {
-    if (hideFavOption) return;
+    if (contextMenuMode !== 'friendRequests' && hideFavOption && !onCloseConversation && !onRemoveFriend) return;
     e.preventDefault();
     const isFav = favoriteIds?.has(itemId) ?? false;
     setCtxMenu({ x: e.clientX, y: e.clientY, itemId, isFav });
-  }, [favoriteIds, hideFavOption]);
+  }, [favoriteIds, hideFavOption, contextMenuMode, onCloseConversation, onRemoveFriend]);
 
   const handleToggleFav = useCallback(() => {
     if (ctxMenu && onToggleFavorite) {
@@ -76,14 +111,46 @@ export const ContactList: React.FC<ContactListProps> = ({
     setCtxMenu(null);
   }, [ctxMenu, onToggleFavorite]);
 
-  const onlineCount = items.filter(i =>
-    i.presence?.status === 'Online' ||
-    i.presence?.status === 'Idle' ||
-    i.presence?.status === 'DoNotDisturb'
-  ).length;
+  const handleAcceptRequest = useCallback(() => {
+    if (ctxMenu && onAcceptFriendRequest) {
+      onAcceptFriendRequest(ctxMenu.itemId);
+    }
+    setCtxMenu(null);
+  }, [ctxMenu, onAcceptFriendRequest]);
+
+  const handleIgnoreRequest = useCallback(() => {
+    if (ctxMenu && onIgnoreFriendRequest) {
+      onIgnoreFriendRequest(ctxMenu.itemId);
+    }
+    setCtxMenu(null);
+  }, [ctxMenu, onIgnoreFriendRequest]);
+
+  const handleCloseConversation = useCallback(() => {
+    if (ctxMenu && onCloseConversation) {
+      onCloseConversation(ctxMenu.itemId);
+    }
+    setCtxMenu(null);
+  }, [ctxMenu, onCloseConversation]);
+
+  const handleRemoveFriend = useCallback(() => {
+    if (ctxMenu && onRemoveFriend) {
+      const item = items.find(i => i.id === ctxMenu.itemId);
+      if (item?.recipientId) onRemoveFriend(item.recipientId);
+    }
+    setCtxMenu(null);
+  }, [ctxMenu, onRemoveFriend, items]);
+
+  const onlineCount = useMemo(
+    () => items.filter(i =>
+      i.presence?.status === 'Online' ||
+      i.presence?.status === 'Idle' ||
+      i.presence?.status === 'DoNotDisturb'
+    ).length,
+    [items],
+  );
 
   return (
-    <div className="contact-category">
+    <div className="contact-category" ref={rootRef}>
       <div
         className="contact-category-header"
         onClick={() => setCollapsed(!collapsed)}
@@ -147,9 +214,42 @@ export const ContactList: React.FC<ContactListProps> = ({
           style={{ top: ctxMenu.y, left: ctxMenu.x }}
           onClick={(e) => e.stopPropagation()}
         >
-          <button className="contact-ctx-item" onClick={handleToggleFav}>
-            {ctxMenu.isFav ? 'Remove from Favorites' : 'Add to Favorites'}
-          </button>
+          {contextMenuMode === 'friendRequests' ? (
+            <>
+              <button className="contact-ctx-item" onClick={handleAcceptRequest}>
+                Accept
+              </button>
+              <button className="contact-ctx-item" onClick={handleIgnoreRequest}>
+                Ignore
+              </button>
+            </>
+          ) : (
+            <>
+              {!hideFavOption && (
+                <button className="contact-ctx-item" onClick={handleToggleFav}>
+                  {ctxMenu.isFav ? 'Remove from Favorites' : 'Add to Favorites'}
+                </button>
+              )}
+              {onCloseConversation && (() => {
+                const item = items.find(i => i.id === ctxMenu.itemId);
+                const showClose = item && (!canCloseConversation || canCloseConversation(item));
+                return showClose ? (
+                  <button className="contact-ctx-item" onClick={handleCloseConversation}>
+                    Close conversation
+                  </button>
+                  ) : null;
+              })()}
+              {onRemoveFriend && (() => {
+                const item = items.find(i => i.id === ctxMenu.itemId);
+                const showRemove = item?.recipientId && friendIds?.has(item.recipientId);
+                return showRemove ? (
+                  <button className="contact-ctx-item" onClick={handleRemoveFriend}>
+                    Remove friend
+                  </button>
+                ) : null;
+              })()}
+            </>
+          )}
         </div>
       )}
     </div>

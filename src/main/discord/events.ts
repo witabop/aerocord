@@ -1,9 +1,26 @@
+/**
+ * Event router — subscribes to events from the Python bridge and broadcasts
+ * them to all renderer windows via Electron IPC, preserving the exact same
+ * channel names and data shapes as before.
+ */
+
 import { BrowserWindow } from 'electron';
-import { discordClient } from './client';
+import { pythonBridge } from './bridge';
 import { IPC } from '../ipc/channels';
 import { settingsManager } from '../services/settings';
 import { windowManager } from '../windows/manager';
 import { themeService } from '../services/theme';
+import { voiceManager } from './voice';
+
+const recentlyUnfriendedUserIds = new Set<string>();
+
+/** Call when removeFriend is invoked so we can suppress the bogus Offline presence update. */
+export function markRecentlyUnfriended(userId: string): void {
+  const id = String(userId ?? '');
+  if (!id) return;
+  recentlyUnfriendedUserIds.add(id);
+  setTimeout(() => recentlyUnfriendedUserIds.delete(id), 15000);
+}
 
 function broadcastToAll(channel: string, ...args: unknown[]): void {
   for (const win of BrowserWindow.getAllWindows()) {
@@ -14,110 +31,261 @@ function broadcastToAll(channel: string, ...args: unknown[]): void {
 }
 
 export function registerDiscordEvents(): void {
-  const client = discordClient.client;
-  if (!client) return;
-
-  client.on('messageCreate', (msg) => {
-    const vm = discordClient.messageToVM(msg);
+  pythonBridge.on('messageCreate', (vm: any) => {
+    vm.notifyEntryOpen = windowManager.hasNotifyEntryOpen(vm.notifyEntryId ?? vm.channelId);
     broadcastToAll(IPC.EVENT_MESSAGE_CREATE, vm);
 
-    const isSelf = msg.author.id === client.user?.id;
+    const isSelf = vm.author?.id === vm._selfId;
     if (isSelf) return;
 
-    const isDM = msg.channel.type === 'DM' || (msg.channel as any).type === 'GROUP_DM';
-    const isMention = msg.mentions.users.has(client.user!.id) || msg.mentions.everyone;
+    const channelOpenAndFocused = windowManager.isChannelOpenAndFocused(vm.channelId);
+    if (channelOpenAndFocused) return;
 
+    const isDM = !!vm.isDirectMessage;
+    const isMention = !!vm.mentionsSelf;
     const scene = themeService.currentScene;
+    const channelOpen = windowManager.isChannelOpen(vm.channelId);
 
     if (isDM && settingsManager.settings.notifyDm) {
-      windowManager.openNotificationWindow({
-        type: 'message',
-        message: vm,
-        channelId: msg.channel.id,
-        scene,
-      });
+      if (!channelOpen) {
+        windowManager.openNotificationWindow({
+          type: 'message',
+          message: vm,
+          channelId: vm.channelId,
+          scene,
+        });
+      }
       broadcastToAll(IPC.PLAY_SOUND, 'newemail.wav');
     } else if (isMention && settingsManager.settings.notifyMention) {
-      windowManager.openNotificationWindow({
-        type: 'message',
-        message: vm,
-        channelId: msg.channel.id,
-        scene,
-      });
+      if (!channelOpen) {
+        windowManager.openNotificationWindow({
+          type: 'message',
+          message: vm,
+          channelId: vm.channelId,
+          scene,
+        });
+      }
       broadcastToAll(IPC.PLAY_SOUND, 'newemail.wav');
     }
   });
 
-  client.on('messageDelete', (msg) => {
-    broadcastToAll(IPC.EVENT_MESSAGE_DELETE, {
-      id: msg.id,
-      channelId: msg.channelId,
-    });
+  pythonBridge.on('messageDelete', (data: any) => {
+    broadcastToAll(IPC.EVENT_MESSAGE_DELETE, data);
   });
 
-  client.on('messageUpdate', (_old, newMsg) => {
-    if (newMsg.partial) return;
-    broadcastToAll(IPC.EVENT_MESSAGE_UPDATE, discordClient.messageToVM(newMsg as any));
+  pythonBridge.on('messageUpdate', (vm: any) => {
+    broadcastToAll(IPC.EVENT_MESSAGE_UPDATE, vm);
   });
 
-  client.on('presenceUpdate', (oldPresence, newPresence) => {
-    if (!newPresence?.user) return;
-    broadcastToAll(IPC.EVENT_PRESENCE_UPDATE, {
-      userId: newPresence.userId,
-      presence: discordClient.presenceToVM(newPresence),
-    });
-
-    if (newPresence.userId === client.user?.id) {
-      const statusMap: Record<string, string> = {
-        online: 'Online', idle: 'Idle', dnd: 'DoNotDisturb', offline: 'Offline', invisible: 'Offline',
-      };
-      windowManager.setStatusOverlay(statusMap[newPresence.status] || 'Online');
+  pythonBridge.on('presenceUpdate', (data: any) => {
+    const rawStatus = data.presence?.status ?? data.newStatus ?? '';
+    const newStatus = String(rawStatus ?? '').toLowerCase();
+    const isOffline = newStatus === 'offline';
+    const userId = data.userId != null ? String(data.userId) : '';
+    if (isOffline && userId && recentlyUnfriendedUserIds.has(userId)) {
+      return;
     }
 
-    const wasOffline = !oldPresence || oldPresence.status === 'offline';
-    const isNowOnline = newPresence.status !== 'offline';
+    broadcastToAll(IPC.EVENT_PRESENCE_UPDATE, {
+      userId: data.userId,
+      presence: data.presence,
+      name: data.name,
+      username: data.username,
+      avatar: data.avatar,
+    });
+
+    const wasOffline = data.oldStatus === 'offline' || !data.oldStatus;
+    const isNowOnline = data.newStatus && data.newStatus !== 'offline';
 
     if (wasOffline && isNowOnline && settingsManager.settings.notifyFriendOnline) {
-      const user = discordClient.userToVM(newPresence.user);
       windowManager.openNotificationWindow({
         type: 'signOn',
-        user,
-        presence: discordClient.presenceToVM(newPresence),
+        user: {
+          id: data.userId,
+          name: data.name || 'Unknown',
+          username: data.username || '',
+          avatar: data.avatar || '',
+          presence: data.presence,
+        },
+        presence: data.presence,
         scene: themeService.currentScene,
       });
     }
   });
 
-  client.on('typingStart', (typing) => {
-    broadcastToAll(IPC.EVENT_TYPING_START, {
-      channelId: typing.channel.id,
-      userId: typing.user?.id,
-      userName: (typing.user as any)?.displayName ?? typing.user?.username,
-    });
+  pythonBridge.on('typingStart', (data: any) => {
+    broadcastToAll(IPC.EVENT_TYPING_START, data);
   });
 
-  client.on('debug', (msg: string) => {
-    if (msg.includes('[VOICE]') || msg.includes('VOICE')) {
-      console.log('[Voice Debug]', msg);
+  pythonBridge.on('voiceStateUpdate', (data: any) => {
+    broadcastToAll(IPC.EVENT_VOICE_STATE_UPDATE, data);
+  });
+
+  pythonBridge.on('channelCreate', (data: any) => {
+    broadcastToAll(IPC.EVENT_CHANNEL_CREATE, data);
+  });
+
+  pythonBridge.on('channelDelete', (data: any) => {
+    broadcastToAll(IPC.EVENT_CHANNEL_DELETE, data);
+  });
+
+  pythonBridge.on('relationshipChange', () => {
+    broadcastToAll(IPC.EVENT_RELATIONSHIP_CHANGE);
+  });
+
+  // --- DM Call events ---
+  // State-machine approach: we DON'T rely on the ringing list (it's always
+  // empty in current discord.py-self). Instead, we infer call direction from
+  // our own state: if callState is 'idle' when callCreate arrives, someone
+  // else started the call (incoming). If it's 'outgoing', we started it.
+
+  pythonBridge.on('callCreate', (data: any) => {
+    const { channelId, callerId, peerConnected } = data;
+    const state = voiceManager.callState;
+    console.log(`[Events] callCreate: ch=${channelId} caller=${callerId} peerConnected=${peerConnected} ourState=${state}`);
+
+    if (state === 'idle') {
+      // We didn't start this — it's an incoming call
+      voiceManager.setCallState('incoming', channelId);
+      broadcastToAll(IPC.CALL_INCOMING, { channelId, callerId });
+    } else if (state === 'outgoing' && voiceManager.callChannelId === channelId) {
+      // Our outgoing call: only transition to active if the PEER has connected
+      if (peerConnected) {
+        voiceManager.setCallState('active', channelId);
+        broadcastToAll(IPC.CALL_ACTIVE, { channelId });
+      }
     }
   });
 
-  client.on('voiceStateUpdate', (oldState, newState) => {
-    broadcastToAll(IPC.EVENT_VOICE_STATE_UPDATE, {
-      userId: newState.id,
-      channelId: newState.channelId,
-      oldChannelId: oldState?.channelId,
-      selfMute: newState.selfMute,
-      selfDeaf: newState.selfDeaf,
-      guildId: newState.guild?.id,
-    });
+  pythonBridge.on('callUpdate', (data: any) => {
+    const { channelId, peerConnected } = data;
+    const state = voiceManager.callState;
+    console.log(`[Events] callUpdate: ch=${channelId} peerConnected=${peerConnected} ourState=${state}`);
+
+    if (state === 'idle') {
+      // Late-arriving ring — treat as incoming
+      voiceManager.setCallState('incoming', channelId);
+      broadcastToAll(IPC.CALL_INCOMING, { channelId, callerId: data.callerId });
+      return;
+    }
+
+    // Outgoing call: peer picked up
+    if (state === 'outgoing' && voiceManager.callChannelId === channelId && peerConnected) {
+      voiceManager.setCallState('active', channelId);
+      broadcastToAll(IPC.CALL_ACTIVE, { channelId });
+      return;
+    }
+
+    // Incoming call cancelled by caller
+    if (state === 'incoming' && voiceManager.callChannelId === channelId) {
+      if (data.unavailable) {
+        voiceManager.setCallState('idle', null);
+        broadcastToAll(IPC.CALL_ENDED, { channelId });
+      }
+    }
   });
 
-  client.on('channelCreate', (channel) => {
-    broadcastToAll(IPC.EVENT_CHANNEL_CREATE, { id: channel.id, type: channel.type });
+  pythonBridge.on('callDelete', (data: any) => {
+    const { channelId } = data;
+    const state = voiceManager.callState;
+    console.log(`[Events] callDelete: ch=${channelId} ourState=${state}`);
+
+    if (state !== 'idle') {
+      const wasActive = state === 'active';
+      voiceManager.setCallState('idle', null);
+      broadcastToAll(IPC.CALL_ENDED, { channelId });
+
+      if (wasActive && voiceManager.currentChannelId === channelId) {
+        voiceManager.leave();
+      }
+    }
   });
 
-  client.on('channelDelete', (channel) => {
-    broadcastToAll(IPC.EVENT_CHANNEL_DELETE, { id: channel.id, type: channel.type });
+  // Voice events from Python sidecar
+  pythonBridge.on('voiceJoined', (data: any) => {
+    broadcastToAll('voice:joined', data);
+  });
+
+  pythonBridge.on('voiceLeft', () => {
+    broadcastToAll('voice:left');
+  });
+
+  pythonBridge.on('voiceSpeaking', (data: any) => {
+    broadcastToAll('voice:speaking', data);
+  });
+
+  pythonBridge.on('voiceAudioData', (data: any) => {
+    if (data?.pcm) {
+      const buf = Buffer.from(data.pcm, 'base64');
+      broadcastToAll('voice:audioData', { userId: data.userId, pcm: buf });
+    }
+  });
+
+  pythonBridge.on('callOutgoing', (data: any) => {
+    if (data?.channelId) {
+      voiceManager.setCallState('outgoing', data.channelId);
+    }
+    broadcastToAll(IPC.CALL_OUTGOING, data);
+  });
+
+  pythonBridge.on('callActive', (data: any) => {
+    if (data?.channelId) {
+      voiceManager.setCallState('active', data.channelId);
+    }
+    broadcastToAll(IPC.CALL_ACTIVE, data);
+  });
+
+  pythonBridge.on('callEnded', (data: any) => {
+    if (data?.channelId && voiceManager.callChannelId === data.channelId) {
+      voiceManager.setCallState('idle', null);
+    }
+    broadcastToAll(IPC.CALL_ENDED, data);
+  });
+
+  // Voice-level peer connect/disconnect — the most reliable signal for DM calls
+  // These come from the voice WebSocket (CLIENTS_CONNECT / CLIENT_DISCONNECT),
+  // not the gateway, so they work even when CALL_UPDATE doesn't fire.
+  pythonBridge.on('peerJoinedVoice', (data: any) => {
+    const callCh = voiceManager.callChannelId;
+    const callSt = voiceManager.callState;
+    console.log(`[Events] peerJoinedVoice: user=${data.userId} ch=${data.channelId} ourState=${callSt}`);
+
+    if (callSt === 'outgoing' && callCh) {
+      console.log('[Events] Peer connected to our outgoing call, transitioning to active');
+      voiceManager.setCallState('active', callCh);
+      broadcastToAll(IPC.CALL_ACTIVE, { channelId: callCh });
+    }
+  });
+
+  pythonBridge.on('peerLeftVoice', (data: any) => {
+    const callCh = voiceManager.callChannelId;
+    const callSt = voiceManager.callState;
+    console.log(`[Events] peerLeftVoice: user=${data.userId} ch=${data.channelId} ourState=${callSt}`);
+
+    if (callSt === 'active' && callCh) {
+      console.log('[Events] Peer left active call, ending');
+      voiceManager.setCallState('idle', null);
+      broadcastToAll(IPC.CALL_ENDED, { channelId: callCh });
+      voiceManager.leave();
+    }
+  });
+
+  // Gateway voice state updates — still useful for guild voice channels
+  pythonBridge.on('voiceStateUpdate', (data: any) => {
+    const callCh = voiceManager.callChannelId;
+    const callSt = voiceManager.callState;
+
+    if (data.channelId && callSt === 'outgoing' && callCh && callCh === data.channelId) {
+      console.log('[Events] Peer joined call channel via gateway voiceState, transitioning to active');
+      voiceManager.setCallState('active', callCh);
+      broadcastToAll(IPC.CALL_ACTIVE, { channelId: callCh });
+    }
+
+    if (!data.channelId && data.oldChannelId && callSt === 'active' && callCh && callCh === data.oldChannelId) {
+      console.log('[Events] Peer left active call via gateway, ending');
+      voiceManager.setCallState('idle', null);
+      broadcastToAll(IPC.CALL_ENDED, { channelId: data.oldChannelId });
+      voiceManager.leave();
+    }
   });
 }

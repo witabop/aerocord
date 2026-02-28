@@ -1,122 +1,282 @@
+/* Login window - WLM style with scene banner and gradients */
+
 .login-window {
-  background: linear-gradient(to bottom,
-    rgba(210, 228, 250, 0.97) 0%,
-    rgba(185, 210, 240, 0.97) 60px,
-    rgba(230, 238, 248, 0.98) 60px,
-    rgba(245, 248, 252, 0.99) 100%
-  );
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: #ffffff;
 }
 
+/* ---- Scene banner (default scene behind profile) ---- */
+.login-scene-banner {
+  position: relative;
+  flex-shrink: 0;
+  min-height: 180px;
+  background-color: var(--login-scene-color, #3bb2ea);
+  overflow: hidden;
+}
+
+.login-scene-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-position: center center;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.85;
+}
+
+.login-scene-gradient {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    color-mix(in srgb, var(--login-scene-color, #3bb2ea) 6%, rgba(255, 255, 255, 0.95) 94%) 70%,
+    color-mix(in srgb, var(--login-scene-color, #3bb2ea) 2%, rgba(255, 255, 255, 0.98) 98%) 100%
+  );
+  z-index: 1;
+  pointer-events: none;
+}
+
+.login-profile-wrap {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  justify-content: center;
+  padding: 46px 0 2px;
+}
+
+.login-profile-wrap .status-avatar {
+  transform: scale(1.4);
+  transform-origin: center center;
+}
+
+/* ---- Body: Sign in title, form box, remember me, button ---- */
 .login-body {
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding: 20px 30px;
+  align-items: stretch;
+  padding: 6px 20px 16px;
   overflow-y: auto;
+  min-height: 0;
+  position: relative;
 }
 
-.login-header {
-  text-align: center;
-  margin-bottom: 24px;
+/* Chat-window style bottom gradient (scene tint at bottom fading up) */
+.login-body::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 150px;
+  background: linear-gradient(
+    to top,
+    color-mix(in srgb, var(--login-scene-color, #7eb4ea) 30%, #f4f6fa 70%),
+    color-mix(in srgb, var(--login-scene-color, #7eb4ea) 12%, #fafbfd 88%) 50%,
+    transparent
+  );
+  pointer-events: none;
+  z-index: 0;
 }
 
-.login-logo {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  margin-bottom: 6px;
+.login-body > * {
+  position: relative;
+  z-index: 1;
 }
 
-.login-icon {
-  font-size: 32px;
-}
-
-.login-logo h1 {
-  font-size: 22px;
-  font-weight: 600;
+.login-sign-in-title {
+  font-size: 18px;
+  font-weight: 700;
   color: #1a3a5c;
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.7);
+  margin: 0 0 12px 0;
+  text-align: center;
 }
 
-.login-subtitle {
-  font-size: 11px;
-  color: #5a7a9a;
+.login-form-box {
+  background: #ffffff;
+  border: 1px solid #c0d0e0;
+  border-radius: 6px;
+  padding: 14px 12px;
+  margin-bottom: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
 }
 
-.login-form {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
+.login-form-group {
+  margin-bottom: 12px;
 }
 
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+.login-form-group:last-child {
+  margin-bottom: 0;
 }
 
-.form-group label {
+.login-form-label {
+  display: block;
   font-size: 11px;
   color: #3a5a7a;
   font-weight: 600;
+  margin-bottom: 4px;
 }
 
-.checkbox-group label {
+.login-sign-in-as-row {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-weight: 400;
+  gap: 10px;
+}
+
+.login-sign-in-as-label {
+  margin-bottom: 0;
+  flex-shrink: 0;
+}
+
+.login-status-dropdown {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  z-index: 9999;
+}
+
+.login-status-dropdown .wlm-dropdown-menu {
+  z-index: 10000;
+}
+
+/* Portal-rendered status dropdown (so it layers above overflow/stacking contexts) */
+.login-status-dropdown-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483646;
+  background: transparent;
+  pointer-events: none; /* don't block hover/click on the menu */
+}
+
+.login-status-dropdown-menu-portal {
+  z-index: 2147483647;
+  pointer-events: auto;
+}
+
+.login-status-dropdown-menu-portal .wlm-dropdown-item {
+  pointer-events: auto;
   cursor: pointer;
-  flex-direction: row;
 }
 
-.checkbox-group input[type="checkbox"] {
-  margin: 0;
+.login-status-icon {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 
-.sign-in-btn {
-  align-self: center;
-  padding: 6px 40px;
-  margin-top: 8px;
+.wlm-dropdown-menu .login-status-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.login-token-input {
+  font-size: 12px;
+  padding: 6px 8px;
+}
+
+.login-status-trigger {
+  width: 100%;
+  justify-content: flex-start;
   font-size: 12px;
 }
 
+.login-remember-row {
+  margin-bottom: 0;
+  margin-top: 10px;
+}
+
+.login-remember-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #3a5a7a;
+  cursor: pointer;
+}
+
+.login-remember-label input[type="checkbox"] {
+  margin: 0;
+}
+
+/* Sign in button - native Windows 7 style */
+.wlm-button.primary.login-sign-in-btn {
+  align-self: center;
+  padding: 8px 36px;
+  font-size: 13px;
+  border-radius: 4px;
+  background: linear-gradient(to bottom, #e0f3ff 0%, #e8f5fc 35%, #f2f8fc 70%, #f9f9f9 100%);
+  border: 1px solid #a6d9f5;
+  color: #333333;
+  text-shadow: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.wlm-button.primary.login-sign-in-btn:hover:not(:disabled) {
+  background: linear-gradient(to bottom, #d4eeff 0%, #e0f2fc 35%, #eef6fc 70%, #f5f5f5 100%);
+  border-color: #8ec9f0;
+}
+
+.wlm-button.primary.login-sign-in-btn:active:not(:disabled) {
+  background: linear-gradient(to bottom, #c8e4f8 0%, #d0eaf5 100%);
+  border-color: #7eb8e0;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.wlm-button.primary.login-sign-in-btn:focus {
+  outline: none;
+  border-color: #0078d7;
+  box-shadow: 0 0 0 1px #0078d7, inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.wlm-button.primary.login-sign-in-btn:disabled {
+  opacity: 0.65;
+  color: #666666;
+}
+
+.login-warning {
+  margin-top: 14px;
+  margin-bottom: 0;
+  font-size: 9px;
+  color: #6a7a8a;
+  line-height: 1.4;
+  text-align: center;
+}
+
+/* ---- Errors / connecting ---- */
 .login-error {
-  padding: 8px 12px;
+  padding: 8px 10px;
   background: #fde8e8;
   border: 1px solid #e8a0a0;
   border-radius: 3px;
   color: #a03030;
   font-size: 11px;
   text-align: center;
+  margin-bottom: 10px;
 }
 
 .login-connecting {
-  padding: 8px 12px;
+  padding: 8px 10px;
   background: #e8f0fa;
   border: 1px solid #a0c0e0;
   border-radius: 3px;
   color: #2a5a8a;
   font-size: 11px;
   text-align: center;
-}
-
-.login-footer {
-  margin-top: auto;
-  padding-top: 16px;
-  text-align: center;
-}
-
-.login-warning {
-  font-size: 9px;
-  color: #8a8a8a;
-  line-height: 1.4;
+  margin-bottom: 10px;
 }
 
 .dropdown-arrow {
   font-size: 8px;
-  margin-left: 4px;
+  margin-left: auto;
 }
 
 .wlm-dropdown {
@@ -133,3 +293,4 @@
   box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.15);
   z-index: 100;
 }
+

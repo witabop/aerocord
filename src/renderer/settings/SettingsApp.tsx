@@ -29,6 +29,7 @@ const SETTING_DEFS: SettingDef[] = [
   { key: 'displayAds', category: 'Appearance', label: 'Show community ads on the home page', type: 'boolean' },
   { key: 'displayAerochatAttribution', category: 'Appearance', label: 'Show Aerocord link on chat window', type: 'boolean' },
   { key: 'displayLinkPreviews', category: 'Appearance', label: 'Show link previews in chat', type: 'boolean' },
+  { key: 'showMemberList', category: 'Appearance', label: 'Show user list in servers and group chats', type: 'boolean' },
   { key: 'selectedTimeFormat', category: 'Appearance', label: 'Time format', type: 'select', options: [{ value: '24h', label: '24-hour' }, { value: '12h', label: '12-hour' }] },
   { key: 'discordDeveloperMode', category: 'Appearance', label: 'Enable developer mode', type: 'boolean' },
 ];

@@ -1,7 +1,7 @@
 {
   "name": "aerocord",
   "productName": "aerocord",
-  "version": "0.1",
+  "version": "0.2",
   "description": "A Discord client inspired by Windows Live Messenger 2009",
   "main": ".webpack/main",
   "private": true,

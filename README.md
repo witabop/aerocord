@@ -54,6 +54,7 @@ And much more!
 
 ### Prerequisites
 
+- **I STRONGLY RECCOMEND USING THIS WITH A WINDOWS 7 CONVERSION TOOL**. If you choose not to, you will **NOT** have the native windows 7 application titlebar and borders.
 - **Windows 10/11 or Linux (probably)** (64-bit)
 - **Node.js** (LTS recommended)
 - **Python 3.10+** with pip

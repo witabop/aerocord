@@ -123,6 +123,9 @@ def build_router() -> JsonRpcRouter:
     async def handle_get_messages(channelId: str) -> list:
         return await bridge_client.get_messages(channelId)
 
+    async def handle_get_messages_before(channelId: str, beforeId: str, limit: int = 50) -> list:
+        return await bridge_client.get_messages_before(channelId, beforeId, limit)
+
     async def handle_send_message(channelId: str, content: str, attachmentPaths: list[str] | None = None) -> dict:
         return await bridge_client.send_message(channelId, content, attachmentPaths)
 
@@ -139,6 +142,7 @@ def build_router() -> JsonRpcRouter:
         await bridge_client.ack_message(channelId, messageId)
 
     router.register("getMessages", handle_get_messages)
+    router.register("getMessagesBefore", handle_get_messages_before)
     router.register("sendMessage", handle_send_message)
     router.register("editMessage", handle_edit_message)
     router.register("deleteMessage", handle_delete_message)
@@ -152,8 +156,8 @@ def build_router() -> JsonRpcRouter:
     async def handle_get_guild_channels(guildId: str) -> list:
         return bridge_client.get_guild_channels(guildId)
 
-    async def handle_get_channel_members(channelId: str) -> list:
-        return await bridge_client.get_channel_members(channelId)
+    async def handle_get_channel_members(channelId: str, limit: int = 0, offset: int = 0) -> list:
+        return await bridge_client.get_channel_members(channelId, limit, offset)
 
     async def handle_get_or_create_dm(userId: str) -> str:
         return await bridge_client.get_or_create_dm_channel(userId)

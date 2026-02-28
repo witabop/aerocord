@@ -147,6 +147,14 @@ class DiscordClientWrapper {
     }
   }
 
+  async getMessagesBefore(channelId: string, beforeId: string, limit = 50): Promise<MessageVM[]> {
+    try {
+      return await pythonBridge.request<MessageVM[]>('getMessagesBefore', { channelId, beforeId, limit });
+    } catch {
+      return [];
+    }
+  }
+
   async sendMessage(channelId: string, content: string, attachmentPaths?: string[]): Promise<{ success: boolean; error?: string }> {
     try {
       return await pythonBridge.request<{ success: boolean; error?: string }>('sendMessage', {
@@ -211,9 +219,9 @@ class DiscordClientWrapper {
     }
   }
 
-  async getChannelMembers(channelId: string): Promise<UserVM[]> {
+  async getChannelMembers(channelId: string, limit = 0, offset = 0): Promise<UserVM[]> {
     try {
-      return await pythonBridge.request<UserVM[]>('getChannelMembers', { channelId });
+      return await pythonBridge.request<UserVM[]>('getChannelMembers', { channelId, limit, offset });
     } catch {
       return [];
     }

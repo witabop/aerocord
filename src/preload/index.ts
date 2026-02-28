@@ -29,6 +29,8 @@ const api = {
   },
   messages: {
     get: (channelId: string) => ipcRenderer.invoke(IPC.MESSAGES_GET, channelId),
+    getBefore: (channelId: string, beforeId: string, limit?: number) =>
+      ipcRenderer.invoke(IPC.MESSAGES_GET_BEFORE, channelId, beforeId, limit),
     send: (channelId: string, content: string, attachmentPaths?: string[]) =>
       ipcRenderer.invoke(IPC.MESSAGES_SEND, channelId, content, attachmentPaths),
     edit: (channelId: string, messageId: string, content: string) =>
@@ -41,7 +43,8 @@ const api = {
   channels: {
     get: (channelId: string) => ipcRenderer.invoke(IPC.CHANNELS_GET, channelId),
     getGuildChannels: (guildId: string) => ipcRenderer.invoke(IPC.CHANNELS_GET_GUILD_CHANNELS, guildId),
-    getMembers: (channelId: string) => ipcRenderer.invoke(IPC.CHANNELS_GET_MEMBERS, channelId),
+    getMembers: (channelId: string, limit?: number, offset?: number) =>
+      ipcRenderer.invoke(IPC.CHANNELS_GET_MEMBERS, channelId, limit, offset),
     getOrCreateDM: (userId: string) => ipcRenderer.invoke(IPC.CHANNELS_GET_OR_CREATE_DM, userId) as Promise<string>,
     closeConversation: (channelId: string) => ipcRenderer.invoke(IPC.CHANNELS_CLOSE_CONVERSATION, channelId) as Promise<{ success: boolean; error?: string }>,
   },

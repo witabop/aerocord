@@ -121,6 +121,10 @@ export function registerIPCHandlers(): void {
     return discordClient.getMessages(channelId);
   });
 
+  ipcMain.handle(IPC.MESSAGES_GET_BEFORE, async (_e, channelId: string, beforeId: string, limit?: number) => {
+    return discordClient.getMessagesBefore(channelId, beforeId, limit);
+  });
+
   ipcMain.handle(IPC.MESSAGES_SEND, async (_e, channelId: string, content: string, attachmentPaths?: string[]) => {
     let resolvedPaths = attachmentPaths;
     if (attachmentPaths?.length) {
@@ -157,8 +161,8 @@ export function registerIPCHandlers(): void {
     return await discordClient.getGuildChannels(guildId);
   });
 
-  ipcMain.handle(IPC.CHANNELS_GET_MEMBERS, async (_e, channelId: string) => {
-    return discordClient.getChannelMembers(channelId);
+  ipcMain.handle(IPC.CHANNELS_GET_MEMBERS, async (_e, channelId: string, limit?: number, offset?: number) => {
+    return discordClient.getChannelMembers(channelId, limit, offset);
   });
 
   ipcMain.handle(IPC.CHANNELS_GET_OR_CREATE_DM, async (_e, userId: string) => {

@@ -372,6 +372,12 @@ def message_to_vm(client: discord.Client, msg: discord.Message, self_id: Optiona
 
     if msg.guild and isinstance(msg.author, discord.Member):
         author = member_to_vm(client, msg.author)
+    elif msg.guild and not isinstance(msg.author, discord.Member):
+        member = msg.guild.get_member(msg.author.id)
+        if member is not None:
+            author = member_to_vm(client, member)
+        else:
+            author = user_to_vm(client, msg.author)
     else:
         author = user_to_vm(client, msg.author)
 

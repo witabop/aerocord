@@ -12,6 +12,9 @@ interface MessageListProps {
   onEdit: (messageId: string, content: string) => void;
   onUserClick?: (userId: string, x: number, y: number) => void;
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
+  onLoadMoreMessages?: () => void;
+  isLoadingMore?: boolean;
+  hasMoreMessages?: boolean;
 }
 
 function formatTime(isoStr: string): string {
@@ -167,6 +170,9 @@ export const MessageList: React.FC<MessageListProps> = ({
   onEdit,
   onUserClick,
   messagesEndRef,
+  onLoadMoreMessages,
+  isLoadingMore,
+  hasMoreMessages,
 }) => {
   const [ctxMenu, setCtxMenu] = useState<ContextMenu | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -192,6 +198,18 @@ export const MessageList: React.FC<MessageListProps> = ({
     el.addEventListener('scroll', onScroll);
     return () => el.removeEventListener('scroll', onScroll);
   }, [ctxMenu]);
+
+  useEffect(() => {
+    const el = scrollContainerRef.current;
+    if (!el || !onLoadMoreMessages) return;
+    const onScroll = () => {
+      if (el.scrollTop < 80 && hasMoreMessages && !isLoadingMore) {
+        onLoadMoreMessages();
+      }
+    };
+    el.addEventListener('scroll', onScroll);
+    return () => el.removeEventListener('scroll', onScroll);
+  }, [onLoadMoreMessages, isLoadingMore, hasMoreMessages]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent, msg: MessageVM, isOwn: boolean) => {
     e.preventDefault();
@@ -234,6 +252,9 @@ export const MessageList: React.FC<MessageListProps> = ({
 
   return (
     <div className="chat-messages" ref={scrollContainerRef}>
+      {isLoadingMore && (
+        <div className="chat-messages-loading">Loading older messages...</div>
+      )}
       {messages.map((msg, i) => {
         const showHeader = shouldShowHeader(msg, messages[i - 1]);
         const isOwn = msg.author.id === currentUserId;

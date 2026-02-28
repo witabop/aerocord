@@ -1605,3 +1605,25 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ---- Loading indicators for infinite scroll ---- */
+.chat-messages-loading {
+  text-align: center;
+  padding: 8px 0;
+  font-size: 11px;
+  color: #888;
+}
+
+.member-sidebar-loading-initial {
+  text-align: center;
+  padding: 18px 8px;
+  font-size: 11px;
+  color: #888;
+}
+
+.member-sidebar-loading {
+  text-align: center;
+  padding: 6px 0;
+  font-size: 10px;
+  color: #888;
+}

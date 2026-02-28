@@ -29,6 +29,12 @@ export const ChatApp: React.FC = () => {
   const [replyTarget, setReplyTarget] = useState<MessageVM | null>(null);
   const [sidebarChannels, setSidebarChannels] = useState<ChannelVM[]>([]);
   const [members, setMembers] = useState<UserVM[]>([]);
+  const [memberOffset, setMemberOffset] = useState(0);
+  const [hasMoreMembers, setHasMoreMembers] = useState(true);
+  const [isLoadingInitialMembers, setIsLoadingInitialMembers] = useState(false);
+  const [isLoadingMoreMembers, setIsLoadingMoreMembers] = useState(false);
+  const [isLoadingMoreMessages, setIsLoadingMoreMessages] = useState(false);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [nudging, setNudging] = useState(false);
   const [notifiedChannelIds, setNotifiedChannelIds] = useState<Set<string>>(new Set());
   const [voiceStates, setVoiceStates] = useState<VoiceChannelStateVM[]>([]);
@@ -64,6 +70,8 @@ export const ChatApp: React.FC = () => {
   const currentUserRef = useRef(currentUser);
   currentUserRef.current = currentUser;
 
+  const MEMBER_PAGE_SIZE = 30;
+
   const loadChannel = useCallback(async (id: string) => {
     if (!id) return;
     const [ch, msgs, user, currentScene] = await Promise.all([
@@ -77,6 +85,7 @@ export const ChatApp: React.FC = () => {
     setMessages(msgs);
     setCurrentUser(user);
     setScene(currentScene);
+    setHasMoreMessages(msgs.length >= 50);
 
     if (msgs.length > 0) {
       const lastMsg = msgs[msgs.length - 1];
@@ -93,10 +102,53 @@ export const ChatApp: React.FC = () => {
     }
 
     if (ch?.isGroupChat || ch?.guildId) {
-      const channelMembers = await window.aerocord.channels.getMembers(id);
-      setMembers(channelMembers);
+      setMemberOffset(0);
+      setHasMoreMembers(true);
+      setIsLoadingInitialMembers(true);
+      window.aerocord.channels.getMembers(id, MEMBER_PAGE_SIZE, 0).then((channelMembers) => {
+        setMembers(channelMembers);
+        setMemberOffset(channelMembers.length);
+        setHasMoreMembers(channelMembers.length >= MEMBER_PAGE_SIZE);
+      }).catch(() => {}).finally(() => {
+        setIsLoadingInitialMembers(false);
+      });
     }
   }, []);
+
+  const loadMoreMembers = useCallback(async () => {
+    if (!channelId || isLoadingMoreMembers || !hasMoreMembers) return;
+    setIsLoadingMoreMembers(true);
+    try {
+      const moreMembers = await window.aerocord.channels.getMembers(channelId, MEMBER_PAGE_SIZE, memberOffset);
+      if (moreMembers.length > 0) {
+        setMembers(prev => [...prev, ...moreMembers]);
+        setMemberOffset(prev => prev + moreMembers.length);
+      }
+      setHasMoreMembers(moreMembers.length >= MEMBER_PAGE_SIZE);
+    } catch { /* ignore */ }
+    setIsLoadingMoreMembers(false);
+  }, [channelId, isLoadingMoreMembers, hasMoreMembers, memberOffset]);
+
+  const loadMoreMessages = useCallback(async () => {
+    if (!channelId || isLoadingMoreMessages || !hasMoreMessages || messages.length === 0) return;
+    setIsLoadingMoreMessages(true);
+    const scrollEl = document.querySelector('.chat-messages');
+    const prevScrollHeight = scrollEl?.scrollHeight ?? 0;
+    try {
+      const oldestId = messages[0].id;
+      const olderMsgs = await window.aerocord.messages.getBefore(channelId, oldestId, 50);
+      if (olderMsgs.length > 0) {
+        setMessages(prev => [...olderMsgs, ...prev]);
+        requestAnimationFrame(() => {
+          if (scrollEl) {
+            scrollEl.scrollTop = scrollEl.scrollHeight - prevScrollHeight;
+          }
+        });
+      }
+      setHasMoreMessages(olderMsgs.length >= 50);
+    } catch { /* ignore */ }
+    setIsLoadingMoreMessages(false);
+  }, [channelId, isLoadingMoreMessages, hasMoreMessages, messages]);
 
   useEffect(() => {
     if (channelId) loadChannel(channelId);
@@ -137,13 +189,21 @@ export const ChatApp: React.FC = () => {
   }, [profilePopup]);
 
   const initialLoadRef = useRef(true);
+  const prevMessageCountRef = useRef(0);
   useEffect(() => {
+    const wasAtBottom = (() => {
+      const el = document.querySelector('.chat-messages');
+      if (!el) return true;
+      return el.scrollHeight - el.scrollTop - el.clientHeight < 100;
+    })();
+
     if (initialLoadRef.current) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'instant' as ScrollBehavior });
       initialLoadRef.current = false;
-    } else {
+    } else if (messages.length > prevMessageCountRef.current && wasAtBottom) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
+    prevMessageCountRef.current = messages.length;
   }, [messages]);
 
   // Voice state updates (join/leave/mute/deafen)
@@ -780,10 +840,15 @@ export const ChatApp: React.FC = () => {
     setChannelId(newChannelId);
     setMessages([]);
     setMembers([]);
+    setMemberOffset(0);
+    setHasMoreMembers(true);
+    setHasMoreMessages(true);
+    setIsLoadingInitialMembers(false);
     setPendingAttachments([]);
     setTypingUsers(new Map());
     setReplyTarget(null);
     initialLoadRef.current = true;
+    prevMessageCountRef.current = 0;
     setNotifiedChannelIds(prev => {
       const next = new Set(prev);
       next.delete(newChannelId);
@@ -1037,6 +1102,9 @@ export const ChatApp: React.FC = () => {
             onEdit={handleEditMessage}
             onUserClick={handleOpenProfile}
             messagesEndRef={messagesEndRef}
+            onLoadMoreMessages={loadMoreMessages}
+            isLoadingMore={isLoadingMoreMessages}
+            hasMoreMessages={hasMoreMessages}
           />
 
           <div className="chat-typing">
@@ -1076,8 +1144,15 @@ export const ChatApp: React.FC = () => {
           )}
         </div>
 
-        {isGroupOrServer && members.length > 0 && showMemberList && (
-          <MemberSidebar members={members} onUserClick={handleOpenProfile} />
+        {isGroupOrServer && (members.length > 0 || isLoadingInitialMembers) && showMemberList && (
+          <MemberSidebar
+            members={members}
+            onUserClick={handleOpenProfile}
+            onLoadMore={loadMoreMembers}
+            isLoadingMore={isLoadingMoreMembers}
+            isLoadingInitial={isLoadingInitialMembers}
+            hasMore={hasMoreMembers}
+          />
         )}
       </div>
 

@@ -222,6 +222,7 @@ export interface AerocordAPI {
   };
   messages: {
     get(channelId: string): Promise<MessageVM[]>;
+    getBefore(channelId: string, beforeId: string, limit?: number): Promise<MessageVM[]>;
     send(channelId: string, content: string, attachmentPaths?: string[]): Promise<{ success: boolean; error?: string }>;
     edit(channelId: string, messageId: string, content: string): Promise<boolean>;
     delete(channelId: string, messageId: string): Promise<boolean>;
@@ -231,7 +232,7 @@ export interface AerocordAPI {
   channels: {
     get(channelId: string): Promise<ChannelVM | null>;
     getGuildChannels(guildId: string): Promise<ChannelVM[]>;
-    getMembers(channelId: string): Promise<UserVM[]>;
+    getMembers(channelId: string, limit?: number, offset?: number): Promise<UserVM[]>;
     getOrCreateDM(userId: string): Promise<string>;
     closeConversation(channelId: string): Promise<{ success: boolean; error?: string }>;
   };

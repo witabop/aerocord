@@ -24,6 +24,7 @@ export const IPC = {
 
   // Messages
   MESSAGES_GET: 'messages:get',
+  MESSAGES_GET_BEFORE: 'messages:getBefore',
   MESSAGES_SEND: 'messages:send',
   MESSAGES_EDIT: 'messages:edit',
   MESSAGES_DELETE: 'messages:delete',

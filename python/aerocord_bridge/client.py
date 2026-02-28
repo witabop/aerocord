@@ -6,8 +6,11 @@ Mirrors the API surface of the original TypeScript DiscordClientWrapper.
 from __future__ import annotations
 
 import asyncio
+import json
 import sys
 import traceback
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any, Optional
 
 import discord
@@ -26,6 +29,12 @@ from .serializers import (
 from .protocol import send_event
 
 
+_CACHE_DIR = Path.home() / ".aerocord"
+_MEMBER_CACHE_FILE = _CACHE_DIR / "member_cache.json"
+_CACHE_MAX_AGE_HOURS = 72
+_CACHE_MAX_GUILDS = 50
+
+
 class DiscordBridgeClient:
     def __init__(self) -> None:
         self._client: Optional[discord.Client] = None
@@ -33,6 +42,47 @@ class DiscordBridgeClient:
         self._desired_status: str = "online"
         self._custom_status_text: Optional[str] = None
         self._events_registered = False
+        self._unchunkable_guilds: set[int] = set()
+        self._seeded_guilds: set[int] = set()
+        self._member_query_progress: dict[int, int] = {}
+        self._member_id_cache: dict[int, dict] = self._load_member_cache()
+
+    @staticmethod
+    def _load_member_cache() -> dict[int, dict]:
+        try:
+            if not _MEMBER_CACHE_FILE.exists():
+                return {}
+            raw = json.loads(_MEMBER_CACHE_FILE.read_text(encoding="utf-8"))
+            now = datetime.now(timezone.utc)
+            result: dict[int, dict] = {}
+            for gid_str, entry in raw.items():
+                updated = datetime.fromisoformat(entry["updated_at"])
+                if (now - updated).total_seconds() < _CACHE_MAX_AGE_HOURS * 3600:
+                    result[int(gid_str)] = entry
+            return result
+        except Exception:
+            return {}
+
+    def _save_member_cache(self) -> None:
+        try:
+            _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+            out: dict[str, dict] = {}
+            items = sorted(self._member_id_cache.items(), key=lambda kv: kv[1].get("updated_at", ""), reverse=True)
+            for gid, entry in items[:_CACHE_MAX_GUILDS]:
+                out[str(gid)] = entry
+            _MEMBER_CACHE_FILE.write_text(json.dumps(out), encoding="utf-8")
+        except Exception:
+            pass
+
+    def _cache_guild_members(self, guild: Any) -> None:
+        member_ids = [m.id for m in guild.members]
+        if not member_ids:
+            return
+        self._member_id_cache[guild.id] = {
+            "member_ids": member_ids,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        self._save_member_cache()
 
     @property
     def client(self) -> Optional[discord.Client]:
@@ -127,6 +177,9 @@ class DiscordBridgeClient:
 
     async def logout(self) -> None:
         self._ready = False
+        self._unchunkable_guilds.clear()
+        self._seeded_guilds.clear()
+        self._member_query_progress.clear()
         if self._client:
             try:
                 await self._client.close()
@@ -257,6 +310,7 @@ class DiscordBridgeClient:
         guilds = sorted(self._client.guilds, key=lambda g: (g.joined_at or g.created_at).timestamp() if (g.joined_at or g.created_at) else 0)
 
         for guild in guilds:
+            me = guild.me
             text_channels = sorted(
                 [c for c in guild.channels if isinstance(c, (discord.TextChannel,))],
                 key=lambda c: c.position,
@@ -264,7 +318,22 @@ class DiscordBridgeClient:
             if not text_channels:
                 continue
 
-            first = text_channels[0]
+            first = None
+            for ch in text_channels:
+                if me:
+                    try:
+                        perms = ch.permissions_for(me)
+                        if perms.view_channel and perms.read_messages:
+                            first = ch
+                            break
+                    except Exception:
+                        pass
+                else:
+                    first = ch
+                    break
+            if first is None:
+                first = text_channels[0]
+
             icon = str(guild.icon.with_size(32).url) if guild.icon else None
 
             categories[0]["items"].append({
@@ -296,6 +365,148 @@ class DiscordBridgeClient:
                 return str(text_channels[0].id)
         return channel_id
 
+    async def _try_chunk(self, guild: Any) -> bool:
+        """Try gateway chunk; returns True on success, marks unchunkable on failure."""
+        if guild.chunked:
+            return True
+        if guild.id in self._unchunkable_guilds:
+            return False
+        try:
+            await asyncio.wait_for(guild.chunk(), timeout=15)
+            return True
+        except Exception:
+            self._unchunkable_guilds.add(guild.id)
+            print(f"[bridge] Guild '{guild.name}' marked unchunkable", file=sys.stderr)
+            return False
+
+    _SEED_MAX_CHANNELS = 15
+    _SEED_CHANNEL_DELAY = 0.4
+    _BATCH_DELAY = 0.5
+    _ALPHA_QUERY_DELAY = 0.6
+
+    async def _seed_recent_authors(self, guild: Any, channel: Any) -> None:
+        """For unchunkable guilds, seed member cache from disk cache or by scanning channels."""
+        gid = guild.id
+        if gid in self._seeded_guilds:
+            return
+        self._seeded_guilds.add(gid)
+
+        cached_entry = self._member_id_cache.get(gid)
+        if cached_entry:
+            cached_ids = cached_entry.get("member_ids", [])
+            uncached = [uid for uid in cached_ids if guild.get_member(uid) is None]
+            if uncached:
+                await self._batch_fetch_member_ids(guild, uncached)
+            cached_count = len(guild.members)
+            print(f"[bridge] Restored {cached_count} members for '{guild.name}' from disk cache ({len(cached_ids)} saved IDs)", file=sys.stderr)
+            return
+
+        try:
+            me = guild.me or guild.get_member(self._client.user.id) if self._client and self._client.user else None
+            text_channels = sorted(
+                [c for c in guild.channels if isinstance(c, discord.TextChannel)],
+                key=lambda c: c.position,
+            )
+            if me:
+                text_channels = [c for c in text_channels if c.permissions_for(me).view_channel]
+
+            text_channels = text_channels[:self._SEED_MAX_CHANNELS]
+            if not text_channels:
+                return
+
+            author_ids: set[int] = set()
+            after = datetime.now(timezone.utc) - timedelta(weeks=3)
+            msgs_per_channel = max(50, 800 // len(text_channels))
+
+            for i, ch in enumerate(text_channels):
+                try:
+                    async for msg in ch.history(limit=msgs_per_channel, after=after):
+                        if msg.author:
+                            author_ids.add(msg.author.id)
+                except discord.Forbidden:
+                    continue
+                except Exception:
+                    continue
+                if i < len(text_channels) - 1:
+                    await asyncio.sleep(self._SEED_CHANNEL_DELAY)
+
+            uncached = [uid for uid in author_ids if guild.get_member(uid) is None]
+            if uncached:
+                await self._batch_fetch_member_ids(guild, uncached)
+
+            self._cache_guild_members(guild)
+
+            cached_count = len(guild.members)
+            print(
+                f"[bridge] Seeded {cached_count} members for '{guild.name}' "
+                f"({len(author_ids)} unique authors from {len(text_channels)} channels)",
+                file=sys.stderr,
+            )
+        except Exception as e:
+            print(f"[bridge] Recent author seed failed for '{guild.name}': {e}", file=sys.stderr)
+
+    async def _batch_fetch_member_ids(self, guild: Any, user_ids: list[int]) -> None:
+        """Batch-fetch members by ID via query_members, with individual REST fallback."""
+        for i in range(0, len(user_ids), 100):
+            if i > 0:
+                await asyncio.sleep(self._BATCH_DELAY)
+            batch = user_ids[i:i + 100]
+            try:
+                await asyncio.wait_for(
+                    guild.query_members(user_ids=batch, presences=True, cache=True),
+                    timeout=10,
+                )
+            except Exception:
+                for uid in batch[:15]:
+                    try:
+                        await guild.fetch_member(uid)
+                        await asyncio.sleep(0.3)
+                    except Exception:
+                        pass
+
+    async def _fetch_more_members(self, guild: Any, count: int = 100) -> bool:
+        """Fetch additional members via alphabetical queries. Returns True if any found."""
+        gid = guild.id
+        idx = self._member_query_progress.get(gid, 0)
+        chars = "abcdefghijklmnopqrstuvwxyz0123456789"
+        fetched_total = 0
+
+        while fetched_total < count and idx < len(chars):
+            if fetched_total > 0:
+                await asyncio.sleep(self._ALPHA_QUERY_DELAY)
+            letter = chars[idx]
+            idx += 1
+            try:
+                results = await asyncio.wait_for(
+                    guild.query_members(query=letter, limit=100, presences=True, cache=True),
+                    timeout=8,
+                )
+                fetched_total += len(results)
+            except Exception:
+                pass
+
+        self._member_query_progress[gid] = idx
+        if fetched_total > 0:
+            self._cache_guild_members(guild)
+            print(f"[bridge] Fetched {fetched_total} more members for '{guild.name}' (alpha idx={idx})", file=sys.stderr)
+        return fetched_total > 0
+
+    async def _prefetch_message_authors(self, guild: Any, messages: list) -> None:
+        """Fetch member data for uncached message authors so role colors resolve."""
+        if not guild:
+            return
+        uncached_ids: list[int] = []
+        seen: set[int] = set()
+        for msg in messages:
+            if msg.author and not isinstance(msg.author, discord.Member):
+                uid = msg.author.id
+                if uid not in seen and guild.get_member(uid) is None:
+                    uncached_ids.append(uid)
+                    seen.add(uid)
+        if not uncached_ids:
+            return
+        await self._batch_fetch_member_ids(guild, uncached_ids[:100])
+
     async def get_messages(self, channelId: str) -> list[dict]:
         if not self._client:
             return []
@@ -305,14 +516,56 @@ class DiscordBridgeClient:
                 channel = await self._client.fetch_channel(int(channelId))
             if not hasattr(channel, "history"):
                 return []
+
+            guild = getattr(channel, "guild", None)
+            if guild:
+                await self._try_chunk(guild)
+
             messages = []
             async for msg in channel.history(limit=50):
                 messages.append(msg)
             messages.reverse()
+
+            if guild:
+                await self._prefetch_message_authors(guild, messages)
+
             self_id = self._client.user.id if self._client.user else None
             return [message_to_vm(self._client, m, self_id) for m in messages]
+        except discord.Forbidden:
+            print(f"[bridge] get_messages: no access to channel {channelId}", file=sys.stderr)
+            return []
         except Exception as e:
             print(f"[bridge] get_messages error: {e}", file=sys.stderr)
+            return []
+
+    async def get_messages_before(self, channelId: str, beforeId: str, limit: int = 50) -> list[dict]:
+        if not self._client:
+            return []
+        try:
+            channel = self._client.get_channel(int(channelId))
+            if channel is None:
+                channel = await self._client.fetch_channel(int(channelId))
+            if not hasattr(channel, "history"):
+                return []
+
+            guild = getattr(channel, "guild", None)
+
+            before_obj = discord.Object(id=int(beforeId))
+            messages = []
+            async for msg in channel.history(limit=limit, before=before_obj):
+                messages.append(msg)
+            messages.reverse()
+
+            if guild:
+                await self._prefetch_message_authors(guild, messages)
+
+            self_id = self._client.user.id if self._client.user else None
+            return [message_to_vm(self._client, m, self_id) for m in messages]
+        except discord.Forbidden:
+            print(f"[bridge] get_messages_before: no access to channel {channelId}", file=sys.stderr)
+            return []
+        except Exception as e:
+            print(f"[bridge] get_messages_before error: {e}", file=sys.stderr)
             return []
 
     async def send_message(self, channelId: str, content: str, attachmentPaths: Optional[list[str]] = None) -> dict:
@@ -397,6 +650,16 @@ class DiscordBridgeClient:
             if not channel:
                 return None
 
+            if hasattr(channel, "guild") and channel.guild:
+                me = channel.guild.me
+                if me and hasattr(channel, "permissions_for"):
+                    try:
+                        perms = channel.permissions_for(me)
+                        if not perms.view_channel:
+                            return None
+                    except Exception:
+                        pass
+
             vm = channel_to_vm(self._client, channel)
 
             if isinstance(channel, discord.DMChannel) and channel.recipient:
@@ -409,6 +672,9 @@ class DiscordBridgeClient:
                     pass
 
             return vm
+        except discord.Forbidden:
+            print(f"[bridge] get_channel: no access to channel {channelId}", file=sys.stderr)
+            return None
         except Exception as e:
             print(f"[bridge] get_channel error: {e}", file=sys.stderr)
             return None
@@ -419,12 +685,36 @@ class DiscordBridgeClient:
         guild = self._client.get_guild(int(guildId))
         if not guild:
             return []
-        filtered = [
-            c for c in guild.channels
-            if isinstance(c, (discord.TextChannel, discord.VoiceChannel, discord.StageChannel, discord.CategoryChannel))
-        ]
-        filtered.sort(key=lambda c: c.position)
-        return [channel_to_vm(self._client, c) for c in filtered]
+        me = guild.me
+        visible_channel_ids: set[int] = set()
+        filtered: list = []
+        for c in guild.channels:
+            if not isinstance(c, (discord.TextChannel, discord.VoiceChannel, discord.StageChannel, discord.CategoryChannel)):
+                continue
+            if me and not isinstance(c, discord.CategoryChannel):
+                try:
+                    perms = c.permissions_for(me)
+                    if not perms.view_channel:
+                        continue
+                except Exception:
+                    pass
+            filtered.append(c)
+            visible_channel_ids.add(c.id)
+
+        final = []
+        for c in filtered:
+            if isinstance(c, discord.CategoryChannel):
+                has_children = any(
+                    getattr(ch, "category_id", None) == c.id
+                    for ch in filtered
+                    if not isinstance(ch, discord.CategoryChannel) and ch.id in visible_channel_ids
+                )
+                if not has_children:
+                    continue
+            final.append(c)
+
+        final.sort(key=lambda c: c.position)
+        return [channel_to_vm(self._client, c) for c in final]
 
     def get_voice_states(self, guildId: str) -> list[dict]:
         if not self._client:
@@ -491,7 +781,15 @@ class DiscordBridgeClient:
 
         return [{"channelId": cid, "members": members} for cid, members in channel_map.items()]
 
-    async def get_channel_members(self, channelId: str) -> list[dict]:
+    _STATUS_SORT_ORDER = {
+        discord.Status.online: 0,
+        discord.Status.dnd: 1,
+        discord.Status.idle: 2,
+        discord.Status.offline: 3,
+        discord.Status.invisible: 3,
+    }
+
+    async def get_channel_members(self, channelId: str, limit: int = 0, offset: int = 0) -> list[dict]:
         if not self._client:
             return []
         try:
@@ -502,28 +800,44 @@ class DiscordBridgeClient:
                 return []
 
             if isinstance(channel, discord.GroupChannel):
-                return [user_to_vm(self._client, r) for r in (channel.recipients or [])]
+                members_list = [user_to_vm(self._client, r) for r in (channel.recipients or [])]
+                if limit > 0:
+                    return members_list[offset:offset + limit]
+                return members_list
 
             if isinstance(channel, discord.DMChannel):
                 return [user_to_vm(self._client, channel.recipient)] if channel.recipient else []
 
             if isinstance(channel, discord.TextChannel):
-                try:
-                    await channel.guild.chunk()
-                except Exception:
-                    pass
+                guild = channel.guild
+                await self._try_chunk(guild)
 
-                members = []
-                for member in channel.guild.members:
-                    perms = channel.permissions_for(member)
-                    if perms.view_channel:
-                        members.append(member)
+                if guild.id in self._unchunkable_guilds:
+                    await self._seed_recent_authors(guild, channel)
 
-                members.sort(key=lambda m: (
-                    0 if m.status != discord.Status.offline else 1,
-                    (m.display_name or m.name).lower(),
-                ))
-                return [member_to_vm(self._client, m) for m in members]
+                def _visible_sorted() -> list:
+                    visible = []
+                    for m in guild.members:
+                        try:
+                            if channel.permissions_for(m).view_channel:
+                                visible.append(m)
+                        except Exception:
+                            visible.append(m)
+                    visible.sort(key=lambda m: (
+                        self._STATUS_SORT_ORDER.get(m.status, 3),
+                        (m.display_name or m.name).lower(),
+                    ))
+                    return visible
+
+                members = _visible_sorted()
+
+                need = offset + (limit if limit > 0 else 0)
+                if limit > 0 and need > len(members) and guild.id in self._unchunkable_guilds:
+                    if await self._fetch_more_members(guild, count=100):
+                        members = _visible_sorted()
+
+                page = members[offset:offset + limit] if limit > 0 else members
+                return [member_to_vm(self._client, m) for m in page]
 
             return []
         except Exception as e:

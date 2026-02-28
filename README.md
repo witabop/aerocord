@@ -42,7 +42,8 @@ To bridge the gap between the Node.js main process and the Python Discord client
 And much more!
 
 
-<img width="919" height="705" alt="image" src="https://github.com/user-attachments/assets/b581681f-8164-49e1-b7c2-dfdfe3544cd7" />
+<img width="1035" height="867" alt="image" src="https://github.com/user-attachments/assets/65e12e17-2207-4f46-8a5b-5447ee6d80df" />
+
 
 ## Limitations
 

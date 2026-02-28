@@ -49,6 +49,7 @@ And much more!
 
 - **Larger servers** — Aerocord currently struggles to handle very large servers. It works well for smaller communities and groups of up to around 1000 people; performance and stability on big servers are known issues. Improving this is a priority and will be worked on in future updates.
 - **Operating systems** — The application is restricted to modern operating systems: **Windows** (primary, supported) and **Linux** (untested but should work).
+- **Native application titlebar & border** — The application uses your operating systems native titlebar and window border, so if you aren't using an Aero/Win7 theme of some sort it won't look authentic.
 
 ## Getting Started
 

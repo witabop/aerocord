@@ -99,6 +99,10 @@ aerocord/
 - **[Aerochat](https://github.com/not-nullptr/Aerochat)** — the original native WLM 09 themed Discord client that inspired this project.
 - **[discord.py-self](https://github.com/dolfies/discord.py-self)** — the Python library that powers Aerocord's Discord backend.
 
+## Questions or concerns?
+- Feel free to open an issue on the issues tab of this page!
+- If its urgent you can also reach out to me directly at zoltar.cc on discord. Can't promise I'll respond quickly but I'll try!
+
 ## License
 
 [MIT](LICENSE)

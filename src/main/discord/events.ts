@@ -13,6 +13,8 @@ import { themeService } from '../services/theme';
 import { voiceManager } from './voice';
 
 const recentlyUnfriendedUserIds = new Set<string>();
+/** Sign-on: only one notification per user per online session; cleared when they go offline. */
+const signOnNotifiedUserIds = new Set<string>();
 
 /** Call when removeFriend is invoked so we can suppress the bogus Offline presence update. */
 export function markRecentlyUnfriended(userId: string): void {
@@ -86,6 +88,10 @@ export function registerDiscordEvents(): void {
       return;
     }
 
+    if (isOffline && userId) {
+      signOnNotifiedUserIds.delete(userId);
+    }
+
     broadcastToAll(IPC.EVENT_PRESENCE_UPDATE, {
       userId: data.userId,
       presence: data.presence,
@@ -97,14 +103,16 @@ export function registerDiscordEvents(): void {
     const wasOffline = data.oldStatus === 'offline' || !data.oldStatus;
     const isNowOnline = data.newStatus && data.newStatus !== 'offline';
 
-    if (wasOffline && isNowOnline && settingsManager.settings.notifyFriendOnline) {
+    if (wasOffline && isNowOnline && settingsManager.settings.notifyFriendOnline && userId) {
+      if (signOnNotifiedUserIds.has(userId)) return;
+      signOnNotifiedUserIds.add(userId);
       windowManager.openNotificationWindow({
         type: 'signOn',
         user: {
           id: data.userId,
-          name: data.name || 'Unknown',
+          name: (data.globalName ?? data.name) || 'Unknown',
           username: data.username || '',
-          avatar: data.avatar || '',
+          avatar: (data.globalAvatar ?? data.avatar) || '',
           presence: data.presence,
         },
         presence: data.presence,

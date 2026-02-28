@@ -1,0 +1,44 @@
+.version-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  background: linear-gradient(to bottom, #f5e6a8, #e6c84a 50%, #c9a227 50%, #e8d45c);
+  outline: solid thin rgba(0, 0, 0, 0.25);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.5), 0 0 12px rgba(160, 120, 0, 0.35);
+  border-bottom: 1px solid #b8921f;
+  font-size: 12px;
+  color: #1a1a1a;
+  flex-shrink: 0;
+}
+
+.version-banner-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.version-banner-close {
+  flex-shrink: 0;
+  padding: 2px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 2px;
+}
+
+.version-banner-close:hover {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.version-banner-close img {
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+}

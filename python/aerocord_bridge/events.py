@@ -70,14 +70,13 @@ def register_events(client: discord.Client, get_self_id: Any) -> None:
         user_id = str(after.id)
         presence = presence_to_vm(after)
 
+        # Use the global User (after.user) so we never use server-specific nickname/avatar
         user_obj = getattr(after, "user", after)
-        name = (
-            getattr(user_obj, "display_name", None)
-            or getattr(user_obj, "global_name", None)
-            or getattr(user_obj, "name", "")
-            or ""
-        )
+        if user_obj is after and hasattr(after, "user"):
+            user_obj = after.user
+        global_name = getattr(user_obj, "global_name", None) or ""
         username = getattr(user_obj, "name", "") or ""
+        name = global_name or username or "Unknown"
         avatar = _avatar_url(user_obj, 64)
 
         await send_event("presenceUpdate", {
@@ -88,6 +87,8 @@ def register_events(client: discord.Client, get_self_id: Any) -> None:
             "name": name,
             "username": username,
             "avatar": avatar,
+            "globalName": global_name or name,
+            "globalAvatar": avatar,
         })
 
     @client.event

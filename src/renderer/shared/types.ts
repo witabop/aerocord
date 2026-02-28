@@ -115,6 +115,7 @@ export interface GuildFolderVM {
 
 export interface HomeListItemVM {
   id: string;
+  guildId?: string;
   recipientId?: string;
   name: string;
   presence: PresenceVM;
@@ -169,10 +170,11 @@ export interface SettingsData {
   inputDeviceIndex: number;
   audioInputDeviceId: string;
   audioOutputDeviceId: string;
+  selectedChannels?: Record<string, string>;
 }
 
 export interface NotificationData {
-  type: 'signOn' | 'message';
+  type: 'signOn' | 'message' | 'friendRequest';
   user?: UserVM;
   message?: MessageVM;
   channelId?: string;
@@ -197,6 +199,9 @@ export type LoginStatus = 'success' | 'unauthorized' | 'badRequest' | 'serverErr
 export type DmCallState = 'idle' | 'outgoing' | 'incoming' | 'active';
 
 export interface AerocordAPI {
+  app: {
+    getVersion(): Promise<string>;
+  };
   auth: {
     login(token: string, save: boolean, status: string): Promise<LoginStatus>;
     logout(): Promise<void>;
@@ -282,6 +287,7 @@ export interface AerocordAPI {
   windows: {
     openChat(channelId: string): Promise<void>;
     openSettings(): Promise<void>;
+    openNotification(data: unknown): Promise<void>;
     close(): Promise<void>;
   };
   on(channel: string, callback: (...args: unknown[]) => void): () => void;

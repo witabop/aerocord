@@ -5,7 +5,7 @@ import type { HomeListItemVM } from '../../shared/types';
 interface ContactListProps {
   title: string;
   items: HomeListItemVM[];
-  onDoubleClick: (channelId: string) => void;
+  onDoubleClick: (channelId: string, guildId?: string) => void;
   defaultCollapsed?: boolean;
   icon?: string;
   onToggleFavorite?: (channelId: string, add: boolean) => void;
@@ -93,8 +93,8 @@ export const ContactList: React.FC<ContactListProps> = ({
     setSelectedId(id);
   }, []);
 
-  const handleItemDoubleClick = useCallback((id: string) => {
-    onDoubleClick(id);
+  const handleItemDoubleClick = useCallback((item: HomeListItemVM) => {
+    onDoubleClick(item.id, item.guildId);
   }, [onDoubleClick]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent, itemId: string) => {
@@ -176,7 +176,7 @@ export const ContactList: React.FC<ContactListProps> = ({
                 key={item.id}
                 className={`contact-item ${selectedId === item.id ? 'selected' : ''}`}
                 onClick={() => handleItemClick(item.id)}
-                onDoubleClick={() => handleItemDoubleClick(item.id)}
+                onDoubleClick={() => handleItemDoubleClick(item)}
                 onContextMenu={(e) => handleContextMenu(e, item.id)}
               >
                 <img

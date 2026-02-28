@@ -25,7 +25,9 @@ export const NotificationApp: React.FC = () => {
   const hasClosedRef = useRef(false);
 
   useEffect(() => {
-    const timer = setTimeout(() => setIsClosing(true), 7000);
+    const timer = setTimeout(() => {
+      if (!hasClosedRef.current) setIsClosing(true);
+    }, 7000);
     return () => clearTimeout(timer);
   }, []);
 
@@ -37,18 +39,19 @@ export const NotificationApp: React.FC = () => {
     if (data?.channelId) {
       window.aerocord.windows.openChat(data.channelId);
     }
-    setIsClosing(true);
+    if (!hasClosedRef.current) setIsClosing(true);
   }, [data]);
 
   const handleClose = useCallback(() => {
-    setIsClosing(true);
+    if (!hasClosedRef.current) setIsClosing(true);
   }, []);
 
   const handleAnimationEnd = useCallback((e: React.AnimationEvent<HTMLDivElement>) => {
-    if (e.animationName === 'notification-slide-out' && !hasClosedRef.current) {
-      hasClosedRef.current = true;
-      closeWindow();
-    }
+    if (e.target !== e.currentTarget) return;
+    if (e.animationName !== 'notification-slide-out') return;
+    if (hasClosedRef.current) return;
+    hasClosedRef.current = true;
+    closeWindow();
   }, [closeWindow]);
 
   if (!data || !visible) return null;
@@ -62,6 +65,41 @@ export const NotificationApp: React.FC = () => {
       <span className="notification-header-text">Windows Live Messenger</span>
     </div>
   );
+
+  if (data.type === 'friendRequest') {
+    const status = data.user?.presence?.status || 'Online';
+    return (
+      <div
+        className={`notification-window notification-friend-request ${isClosing ? 'notification-closing' : ''}`}
+        style={{ '--notif-scene-color': sceneColor } as React.CSSProperties}
+        onClick={handleClick}
+        onAnimationEnd={handleAnimationEnd}
+      >
+        {sceneBg && <img className="notif-scene-bg" src={sceneBg} alt="" draggable={false} />}
+        {notifHeader}
+        <button
+          className="notification-close"
+          onClick={(e) => { e.stopPropagation(); handleClose(); }}
+          onMouseEnter={() => setCloseHover(true)}
+          onMouseLeave={() => setCloseHover(false)}
+          aria-label="Close"
+        >
+          <img src={closeHover ? closeIconHoverUrl : closeIconUrl} alt="" draggable={false} />
+        </button>
+        <div className="notification-content">
+          <StatusAvatar
+            src={data.user?.avatar || ''}
+            status={status}
+            size="large"
+          />
+          <div className="notification-text">
+            <div className="notification-title">{data.user?.name ?? data.user?.username ?? 'Someone'}</div>
+            <div className="notification-subtitle">sent a friend request.</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (data.type === 'signOn') {
     const status = data.presence?.status || 'Online';

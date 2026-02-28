@@ -3,6 +3,7 @@ import { useIPCEvent } from '../shared/hooks/useIPC';
 import { ContactList } from './components/ContactList';
 import { UserProfile } from './components/UserProfile';
 import { NewsTicker, type WhatsNewEntry } from './components/NewsTicker';
+import { VersionBanner } from './components/VersionBanner';
 import { ScenePicker } from './components/ScenePicker';
 import { AddFriendPopup } from './components/AddFriendPopup';
 import { assetUrl } from '../shared/hooks/useAssets';
@@ -51,6 +52,7 @@ export const HomeApp: React.FC = () => {
   const [pendingRequests, setPendingRequests] = useState<HomeListItemVM[]>([]);
   const [notifiedChannels, setNotifiedChannels] = useState<Set<string>>(new Set());
   const recentlyUnfriendedRef = useRef<Set<string>>(new Set());
+  const previousPendingIdsRef = useRef<Set<string>>(new Set());
 
   const loadData = useCallback(async () => {
     const [user, channels, guilds, currentScene, appSettings, favIds, friends, pending] = await Promise.all([
@@ -71,6 +73,7 @@ export const HomeApp: React.FC = () => {
     setFavoriteIds(new Set(favIds));
     setFriendIds(new Set(friends));
     setPendingRequests(pending);
+    previousPendingIdsRef.current = new Set(pending.map((p) => p.id));
   }, []);
 
   useEffect(() => {
@@ -141,7 +144,27 @@ export const HomeApp: React.FC = () => {
   });
 
   useIPCEvent('event:relationshipChange', () => {
-    window.aerocord.contacts.getPendingRequests().then(setPendingRequests);
+    window.aerocord.contacts.getPendingRequests().then((pending) => {
+      const prevIds = previousPendingIdsRef.current;
+      const currentIds = new Set(pending.map((p) => p.id));
+      const newRequests = pending.filter((p) => !prevIds.has(p.id));
+      previousPendingIdsRef.current = currentIds;
+      setPendingRequests(pending);
+
+      if (newRequests.length > 0) {
+        playSound('newalert.wav');
+        window.aerocord.theme.getCurrent().then((currentScene) => {
+          const scene = currentScene ? { id: currentScene.id, file: currentScene.file, displayName: currentScene.displayName, color: currentScene.color, isDefault: currentScene.isDefault, textColor: currentScene.textColor, shadowColor: currentScene.shadowColor } : undefined;
+          newRequests.forEach((item) => {
+            window.aerocord.windows.openNotification({
+              type: 'friendRequest',
+              user: { id: item.id, name: item.name, username: item.name, avatar: item.image ?? '', presence: item.presence },
+              scene,
+            });
+          });
+        });
+      }
+    });
     window.aerocord.contacts.getFriends().then(friends => setFriendIds(new Set(friends)));
   });
 
@@ -154,7 +177,23 @@ export const HomeApp: React.FC = () => {
     window.aerocord.windows.openChat(channelId);
   });
 
-  const handleOpenChat = useCallback((channelId: string) => {
+  const handleOpenChat = useCallback((channelId: string, guildId?: string) => {
+    if (guildId) {
+      window.aerocord.settings.get().then((s) => {
+        const sel = s.selectedChannels ?? {};
+        const toOpen = sel[guildId] || channelId;
+        setNotifiedChannels(prev => {
+          const next = new Set(prev);
+          next.delete(toOpen);
+          return next;
+        });
+        window.aerocord.windows.openChat(toOpen);
+      }).catch(() => {
+        setNotifiedChannels(prev => { const next = new Set(prev); next.delete(channelId); return next; });
+        window.aerocord.windows.openChat(channelId);
+      });
+      return;
+    }
     setNotifiedChannels(prev => {
       const next = new Set(prev);
       next.delete(channelId);
@@ -203,8 +242,8 @@ export const HomeApp: React.FC = () => {
 
   const handleCustomStatusChange = useCallback(async (text: string | null) => {
     await window.aerocord.user.setCustomStatus(text);
-    const user = await window.aerocord.user.getCurrent();
-    setCurrentUser(user);
+    // Optimistic update so status text is not delayed by one entry (getCurrent can return stale cache)
+    setCurrentUser((prev) => (prev && prev.presence ? { ...prev, presence: { ...prev.presence, customStatus: text ?? undefined } } : prev));
   }, []);
 
   const handleSignOut = useCallback(async () => {
@@ -492,6 +531,7 @@ export const HomeApp: React.FC = () => {
         ))}
       </div>
 
+      <VersionBanner />
       <NewsTicker visible={showNews} whatsNewEntries={whatsNewEntries} />
 
       <div className="home-bottom-bar">

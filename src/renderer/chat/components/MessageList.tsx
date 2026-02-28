@@ -12,6 +12,7 @@ interface MessageListProps {
   onEdit: (messageId: string, content: string) => void;
   onUserClick?: (userId: string, x: number, y: number) => void;
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
+  scrollContainerRef?: React.RefObject<HTMLDivElement | null>;
   onLoadMoreMessages?: () => void;
   isLoadingMore?: boolean;
   hasMoreMessages?: boolean;
@@ -170,6 +171,7 @@ export const MessageList: React.FC<MessageListProps> = ({
   onEdit,
   onUserClick,
   messagesEndRef,
+  scrollContainerRef: forwardedScrollRef,
   onLoadMoreMessages,
   isLoadingMore,
   hasMoreMessages,
@@ -179,7 +181,8 @@ export const MessageList: React.FC<MessageListProps> = ({
   const [editText, setEditText] = useState('');
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const editRef = useRef<HTMLTextAreaElement>(null);
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const internalScrollRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = forwardedScrollRef ?? internalScrollRef;
 
   useEffect(() => {
     if (editingId && editRef.current) editRef.current.focus();
@@ -250,8 +253,16 @@ export const MessageList: React.FC<MessageListProps> = ({
     if (ctxMenu) { onDelete(ctxMenu.msg.id); setCtxMenu(null); }
   }, [ctxMenu, onDelete]);
 
+  const setScrollRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      (internalScrollRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
+      if (forwardedScrollRef) (forwardedScrollRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
+    },
+    [forwardedScrollRef],
+  );
+
   return (
-    <div className="chat-messages" ref={scrollContainerRef}>
+    <div className="chat-messages" ref={setScrollRef}>
       {isLoadingMore && (
         <div className="chat-messages-loading">Loading older messages...</div>
       )}

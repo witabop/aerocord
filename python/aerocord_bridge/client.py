@@ -344,6 +344,7 @@ class DiscordBridgeClient:
 
             categories[0]["items"].append({
                 "id": str(first.id),
+                "guildId": str(guild.id),
                 "name": guild.name,
                 "presence": {"status": "Online", "presence": "", "type": ""},
                 "lastMsgId": str(first.last_message_id) if first.last_message_id else str(first.id),

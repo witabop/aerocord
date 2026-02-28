@@ -88,9 +88,13 @@ export const IPC = {
   // Shell
   SHELL_OPEN_EXTERNAL: 'shell:openExternal',
 
+  // App
+  APP_GET_VERSION: 'app:getVersion',
+
   // Windows
   WINDOW_OPEN_CHAT: 'window:openChat',
   WINDOW_OPEN_SETTINGS: 'window:openSettings',
+  WINDOW_OPEN_NOTIFICATION: 'window:openNotification',
   WINDOW_CLOSE: 'window:close',
 
   // Events (main -> renderer)

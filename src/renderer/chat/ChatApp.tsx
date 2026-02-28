@@ -55,6 +55,7 @@ export const ChatApp: React.FC = () => {
   const sendErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const typingTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesScrollRef = useRef<HTMLDivElement>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const workletNodeRef = useRef<ScriptProcessorNode | null>(null);
@@ -69,6 +70,8 @@ export const ChatApp: React.FC = () => {
   const playbackReadyRef = useRef(false);
   const currentUserRef = useRef(currentUser);
   currentUserRef.current = currentUser;
+  /** True only when this window is the one with the active DM call (or in voice in this context). Used so we only call voice.leave() on beforeunload when closing THIS window, not when closing another chat window (e.g. guild) which would incorrectly end a DM call. */
+  const isCallOrVoiceWindowRef = useRef(false);
 
   const MEMBER_PAGE_SIZE = 30;
 
@@ -155,6 +158,18 @@ export const ChatApp: React.FC = () => {
   }, [channelId, loadChannel]);
 
   useEffect(() => {
+    if (channel?.guildId && channelId) {
+      window.aerocord.settings.get().then((s) => {
+        const sel = s.selectedChannels ?? {};
+        if (sel[channel.guildId!] === channelId) return;
+        window.aerocord.settings.update({
+          selectedChannels: { ...sel, [channel.guildId!]: channelId },
+        });
+      }).catch(() => {});
+    }
+  }, [channel?.guildId, channelId, channel]);
+
+  useEffect(() => {
     window.aerocord.settings.get().then((s) => setShowMemberList(s.showMemberList ?? true));
   }, []);
 
@@ -170,10 +185,17 @@ export const ChatApp: React.FC = () => {
     }).catch(() => {});
   }, [channelId]);
 
-  // Disconnect from voice/call on refresh or window close so main process leaves immediately
+  useEffect(() => {
+    isCallOrVoiceWindowRef.current =
+      dmCallState !== 'idle' && dmCallChannelId !== null && dmCallChannelId === channelId;
+  }, [dmCallState, dmCallChannelId, channelId]);
+
+  // Disconnect from voice/call only when THIS window closes (not when another chat window closes)
   useEffect(() => {
     const onBeforeUnload = () => {
-      window.aerocord.voice.leave();
+      if (isCallOrVoiceWindowRef.current) {
+        window.aerocord.voice.leave();
+      }
     };
     window.addEventListener('beforeunload', onBeforeUnload);
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
@@ -190,6 +212,13 @@ export const ChatApp: React.FC = () => {
 
   const initialLoadRef = useRef(true);
   const prevMessageCountRef = useRef(0);
+  /** When set, we should scroll to bottom once messages for this channel have been rendered. */
+  const pendingScrollChannelIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (channelId) pendingScrollChannelIdRef.current = channelId;
+  }, [channelId]);
+
   useEffect(() => {
     const wasAtBottom = (() => {
       const el = document.querySelector('.chat-messages');
@@ -197,14 +226,44 @@ export const ChatApp: React.FC = () => {
       return el.scrollHeight - el.scrollTop - el.clientHeight < 100;
     })();
 
-    if (initialLoadRef.current) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'instant' as ScrollBehavior });
+    const messagesBelongToCurrentChannel =
+      messages.length > 0 && messages[0].channelId === channelId;
+    const shouldScrollToBottomOnLoad =
+      channelId &&
+      pendingScrollChannelIdRef.current === channelId &&
+      messagesBelongToCurrentChannel;
+
+    if (shouldScrollToBottomOnLoad) {
+      pendingScrollChannelIdRef.current = null;
       initialLoadRef.current = false;
+      const scrollToBottom = () => {
+        const el = document.querySelector('.chat-messages');
+        if (el) {
+          el.scrollTop = el.scrollHeight;
+        }
+        messagesEndRef.current?.scrollIntoView({ behavior: 'instant' as ScrollBehavior });
+      };
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(scrollToBottom);
+        });
+      });
     } else if (messages.length > prevMessageCountRef.current && wasAtBottom) {
+      const scrollToBottom = () => {
+        const el = messagesScrollRef.current;
+        if (!el) return;
+        const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
+        if (!nearBottom) return;
+        el.scrollTop = el.scrollHeight;
+        messagesEndRef.current?.scrollIntoView({ behavior: 'instant' as ScrollBehavior });
+      };
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      const delays = [100, 350, 700];
+      const timers = delays.map((ms) => setTimeout(scrollToBottom, ms));
+      return () => timers.forEach((t) => clearTimeout(t));
     }
     prevMessageCountRef.current = messages.length;
-  }, [messages]);
+  }, [messages, channelId]);
 
   // Voice state updates (join/leave/mute/deafen)
   useIPCEvent('event:voiceStateUpdate', (data: unknown) => {
@@ -1102,6 +1161,7 @@ export const ChatApp: React.FC = () => {
             onEdit={handleEditMessage}
             onUserClick={handleOpenProfile}
             messagesEndRef={messagesEndRef}
+            scrollContainerRef={messagesScrollRef}
             onLoadMoreMessages={loadMoreMessages}
             isLoadingMore={isLoadingMoreMessages}
             hasMoreMessages={hasMoreMessages}

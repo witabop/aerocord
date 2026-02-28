@@ -1,4 +1,4 @@
-import { ipcMain, BrowserWindow, dialog, shell } from 'electron';
+import { ipcMain, BrowserWindow, dialog, shell, app } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -11,6 +11,9 @@ import { themeService } from '../services/theme';
 import { windowManager } from '../windows/manager';
 
 export function registerIPCHandlers(): void {
+  // ---- App ----
+  ipcMain.handle(IPC.APP_GET_VERSION, async () => app.getVersion());
+
   // ---- Shell (register early so open-in-browser works in all windows) ----
   ipcMain.handle('shell:openExternal', async (_e, url: string) => {
     await shell.openExternal(url);
@@ -360,6 +363,10 @@ export function registerIPCHandlers(): void {
 
   ipcMain.handle(IPC.WINDOW_OPEN_SETTINGS, async () => {
     windowManager.openSettingsWindow();
+  });
+
+  ipcMain.handle(IPC.WINDOW_OPEN_NOTIFICATION, async (_e, data: unknown) => {
+    windowManager.openNotificationWindow(data);
   });
 
   ipcMain.handle(IPC.WINDOW_CLOSE, async (e) => {

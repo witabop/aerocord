@@ -157,12 +157,21 @@ class WindowManager {
     });
 
     chatWindow.on('closed', () => {
-      voiceManager.leave();
+      // Only leave voice/call if this window was the one in a call (avoid leaving DM call when closing a guild window)
+      const callCh = voiceManager.callChannelId;
+      const voiceCh = voiceManager.currentChannelId;
+      if (channelId === callCh || channelId === voiceCh) {
+        voiceManager.leave();
+      }
       this._chatWindows.delete(channelId);
       this._openNotifyEntryIds.delete(resolvedEntryId);
     });
     chatWindow.webContents.on('render-process-gone', () => {
-      voiceManager.leave();
+      const callCh = voiceManager.callChannelId;
+      const voiceCh = voiceManager.currentChannelId;
+      if (channelId === callCh || channelId === voiceCh) {
+        voiceManager.leave();
+      }
     });
 
     return chatWindow;

@@ -2,6 +2,9 @@ import { contextBridge, ipcRenderer } from 'electron';
 import { IPC } from '../main/ipc/channels';
 
 const api = {
+  app: {
+    getVersion: () => ipcRenderer.invoke(IPC.APP_GET_VERSION) as Promise<string>,
+  },
   auth: {
     login: (token: string, save: boolean, status: string) =>
       ipcRenderer.invoke(IPC.AUTH_LOGIN, token, save, status),
@@ -99,6 +102,7 @@ const api = {
   windows: {
     openChat: (channelId: string) => ipcRenderer.invoke(IPC.WINDOW_OPEN_CHAT, channelId),
     openSettings: () => ipcRenderer.invoke(IPC.WINDOW_OPEN_SETTINGS),
+    openNotification: (data: unknown) => ipcRenderer.invoke(IPC.WINDOW_OPEN_NOTIFICATION, data),
     close: () => ipcRenderer.invoke(IPC.WINDOW_CLOSE),
   },
   on: (channel: string, callback: (...args: unknown[]) => void): (() => void) => {

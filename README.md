@@ -22,7 +22,8 @@ Because Aerocord is an Electron app, the obvious choice for talking to Discord w
 
 To bridge the gap between the Node.js main process and the Python Discord client, Aerocord spawns a Python sidecar process and communicates with it over stdin/stdout using an NDJSON-based RPC protocol. The Electron side sends commands (login, send message, join voice, etc.) and the Python side streams events back. It adds a layer of complexity, but the trade-off is a much more capable and up-to-date Discord backend.
 
-<img width="348" height="690" alt="image" src="https://github.com/user-attachments/assets/e6fdba7b-26b4-4fcb-8dfd-17c78e2bf7b3" />
+<img width="475" height="809" alt="image" src="https://github.com/user-attachments/assets/56e98aca-64b3-4a5c-a42a-6503c579d012" />
+
 
 
 ## Features
@@ -40,7 +41,9 @@ To bridge the gap between the Node.js main process and the Python Discord client
 
 And much more!
 
-<img width="306" height="630" alt="image" src="https://github.com/user-attachments/assets/3ebdbe22-f8c3-4ab9-9138-4f58500a6aab" />
+
+<img width="919" height="705" alt="image" src="https://github.com/user-attachments/assets/b581681f-8164-49e1-b7c2-dfdfe3544cd7" />
+
 
 
 ## Getting Started

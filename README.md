@@ -6,6 +6,12 @@ A Discord client for Windows that brings back the look and feel of **Windows Liv
 
 ![Aerocord](docs/assets/aerocordlogo.png)
 
+## Download
+
+Download Aerocord from the project’s GitHub Releases page. Grab the **Windows installer** (`.exe`), it’s the easiest way to install on Windows 10 or 11 (64-bit).
+
+[**Releases**](https://github.com/witabop/aerocord/releases)
+
 ## About
 
 Aerocord is a spiritual fork of [Aerochat](https://github.com/not-nullptr/Aerochat), a native C#/WPF Discord client themed after WLM 2009. Aerochat is an excellent project, but it is tightly coupled to the Windows desktop via WPF and .NET. Aerocord takes the same concept — a nostalgic Messenger-style Discord experience — and rebuilds it on top of Electron and React so the UI layer is web-based and easier to iterate on. The visual language, layout, and general UX philosophy are heavily inspired by Aerochat, and the project would not exist without it.
@@ -18,12 +24,14 @@ To bridge the gap between the Node.js main process and the Python Discord client
 
 ## Features
 
-- **Messaging** — send, edit, delete, reply, attachments, emoji picker, GIF picker, image previews
+- **Messaging** — send, edit, delete, reply, attachments, image previews
 - **Voice** — join/leave voice channels, self-mute/deafen, per-user volume, speaking indicators
 - **DM Calls** — start, accept, decline, and hang up direct-message calls
 - **Friends & Contacts** — friend requests, DM list, server list, favourites
+- **Profiles** — can click on usernames or server list entry to view a user profile
 - **Status & Presence** — online, idle, DND, invisible, custom status text
 - **Scenes** — 30+ WLM-style background scenes with dynamic colours
+- **Emojis & Gifs** — Includes WLM09 emojis as well as so gifs from that same era
 - **Notifications** — toast-style notification popups
 - **Settings** — persistent per-user configuration
 

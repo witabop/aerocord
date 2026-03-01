@@ -20,9 +20,13 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 app.on('ready', async () => {
-  // Load .env from project root (cwd and app path so dev and packaged both work)
+  // Load .env: dev = project root; packaged = resources/packaged-env and next to exe
   require('dotenv').config({ path: path.resolve(process.cwd(), '.env') });
   require('dotenv').config({ path: path.join(app.getAppPath(), '.env') });
+  if (app.isPackaged) {
+    require('dotenv').config({ path: path.join(process.resourcesPath, 'packaged-env', '.env') });
+    require('dotenv').config({ path: path.join(path.dirname(app.getPath('exe')), '.env') });
+  }
 
   session.defaultSession.webRequest.onBeforeSendHeaders(
     { urls: ['*://cdn.discordapp.com/*', '*://media.discordapp.net/*'] },

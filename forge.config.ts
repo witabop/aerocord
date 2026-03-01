@@ -1,4 +1,5 @@
 import type { ForgeConfig } from '@electron-forge/shared-types';
+import * as fs from 'fs';
 import * as path from 'path';
 import { spawnSync } from 'child_process';
 import { MakerSquirrel } from '@electron-forge/maker-squirrel';
@@ -34,6 +35,15 @@ const config: ForgeConfig = {
       if (build.status !== 0) {
         throw new Error(`Python bridge build failed with code ${build.status}`);
       }
+      // Copy .env into packaged-env so the packaged app can load API keys (e.g. Klipy)
+      const packagedEnvDir = path.join(__dirname, 'packaged-env');
+      const envSrc = path.join(__dirname, '.env');
+      fs.mkdirSync(packagedEnvDir, { recursive: true });
+      if (fs.existsSync(envSrc)) {
+        fs.copyFileSync(envSrc, path.join(packagedEnvDir, '.env'));
+      } else {
+        fs.writeFileSync(path.join(packagedEnvDir, '.env'), '');
+      }
     },
   },
   packagerConfig: {
@@ -43,6 +53,7 @@ const config: ForgeConfig = {
       './python/dist/aerocord_bridge',
       './src/assets',
       './src/assets/images/icons/MainWnd.ico',
+      './packaged-env',
     ],
   },
   rebuildConfig: {},

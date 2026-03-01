@@ -189,6 +189,9 @@ def build_router() -> JsonRpcRouter:
     async def handle_voice_set_input_volume(volume: float) -> None:
         voice_bridge.set_input_volume(volume)
 
+    async def handle_voice_set_noise_gate_db(db: float) -> None:
+        voice_bridge.set_noise_gate_db(db)
+
     async def handle_voice_get_input_volume() -> float:
         return voice_bridge.get_input_volume()
 
@@ -215,6 +218,7 @@ def build_router() -> JsonRpcRouter:
     router.register("voiceSetSelfMute", handle_voice_set_self_mute)
     router.register("voiceSetSelfDeafen", handle_voice_set_self_deafen)
     router.register("voiceSetInputVolume", handle_voice_set_input_volume)
+    router.register("voiceSetNoiseGateDb", handle_voice_set_noise_gate_db)
     router.register("voiceGetInputVolume", handle_voice_get_input_volume)
     router.register("voiceSetUserVolume", handle_voice_set_user_volume)
     router.register("voiceGetUserVolume", handle_voice_get_user_volume)

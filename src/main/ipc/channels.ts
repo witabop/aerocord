@@ -80,6 +80,11 @@ export const IPC = {
   ASSETS_GET_PATH: 'assets:getPath',
   ASSETS_LIST_GIFS: 'assets:listGifs',
 
+  // Klipy GIF API (Web section)
+  GIFS_HAS_KEYS: 'gifs:hasKeys',
+  GIFS_FETCH_TRENDING: 'gifs:fetchTrending',
+  GIFS_SEARCH: 'gifs:search',
+
   // Dialog / Files
   DIALOG_PICK_FILES: 'dialog:pickFiles',
   FILES_WRITE_TEMP: 'files:writeTemp',

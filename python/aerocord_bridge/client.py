@@ -654,6 +654,10 @@ class DiscordBridgeClient:
                             return None
                     except Exception:
                         pass
+                # Trigger guild chunk/load when first opening this guild (e.g. from a notification).
+                # Ensures 1000+ member guilds load the same whether opened from home or from a mention.
+                if isinstance(channel, discord.TextChannel):
+                    await self._try_chunk(channel.guild)
 
             vm = channel_to_vm(self._client, channel)
 

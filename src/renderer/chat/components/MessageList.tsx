@@ -1,8 +1,11 @@
-import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { assetUrl } from '../../shared/hooks/useAssets';
 import { splitByEmojiCodes, getEmojiFileForCode } from '../../shared/emojiCodes';
-import type { MessageVM } from '../../shared/types';
+import type { MessageVM, FavoriteGifEntry } from '../../shared/types';
+import { isGifUrl, isEmbedGifLink, isDirectGifUrl, EMBED_GIF_HOSTS, getGifUrlHost } from '../../shared/gifUtils';
 import { ImageLightbox } from './ImageLightbox';
+
+const STAR_ICON_URL = assetUrl('images', 'emoji', 'Star.png');
 
 interface MessageListProps {
   messages: MessageVM[];
@@ -38,6 +41,84 @@ function isImageAttachment(contentType?: string, filename?: string): boolean {
     return ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'].includes(ext || '');
   }
   return false;
+}
+
+/** True only for GIFs (contentType image/gif or filename .gif). */
+function isGifAttachment(contentType?: string, filename?: string): boolean {
+  if (contentType && contentType.toLowerCase() === 'image/gif') return true;
+  if (filename && filename.toLowerCase().endsWith('.gif')) return true;
+  return false;
+}
+
+/** Display URL for an embed (image, video, or url for link-only GIF). */
+function getEmbedDisplayUrl(embed: MessageVM['embeds'][0]): string {
+  return embed.video?.url ?? embed.image?.url ?? embed.url ?? '';
+}
+
+/** Payload to add to favorites for an embed: link + displayUrl so we send the link but can show the media. */
+function getEmbedFavoritePayload(embed: MessageVM['embeds'][0]): FavoriteGifEntry {
+  const link = embed.url;
+  const mediaUrl = embed.video?.url ?? embed.image?.url;
+  if (link && isEmbedGifLink(link) && mediaUrl) return { link, displayUrl: mediaUrl };
+  return (mediaUrl ?? link) as string;
+}
+
+/** Id used to match this embed in the favorites list (for isFav check and remove). */
+function getEmbedFavoriteId(embed: MessageVM['embeds'][0]): string {
+  if (embed.url && isEmbedGifLink(embed.url)) return embed.url;
+  return embed.video?.url ?? embed.image?.url ?? embed.url ?? '';
+}
+
+function isUrlFavorited(id: string, list: FavoriteGifEntry[]): boolean {
+  return list.some(
+    (e) => e === id || (typeof e === 'object' && (e.link === id || e.displayUrl === id))
+  );
+}
+
+function removeFavoriteEntry(list: FavoriteGifEntry[], id: string): FavoriteGifEntry[] {
+  return list.filter(
+    (e) => e !== id && (typeof e !== 'object' || (e.link !== id && e.displayUrl !== id))
+  );
+}
+
+/** True when message content is only a single link that matches a media embed or is a direct GIF URL (hide link, show only embed). */
+function contentIsOnlyEmbedLink(msg: MessageVM): boolean {
+  if (!msg.content?.trim()) return false;
+  const trimmed = msg.content.trim();
+  const singleUrlMatch = trimmed.match(/^(https?:\/\/\S+)$/);
+  if (!singleUrlMatch) return false;
+  const url = singleUrlMatch[1];
+  /* Direct GIF URLs (e.g. static.klipy.com/.../xxx.gif): always hide link and show only embed */
+  if (isDirectGifUrl(url)) return true;
+  if (msg.embeds.length === 0) return false;
+  const hasMediaEmbed = msg.embeds.some((e) => e.image || e.video);
+  if (!hasMediaEmbed) return false;
+  const linkMatchesEmbed = msg.embeds.some(
+    (e) => e.url && (e.url === url || url.startsWith(e.url) || e.url.startsWith(url))
+  );
+  if (linkMatchesEmbed) return true;
+  const host = getGifUrlHost(url);
+  return host !== null && (EMBED_GIF_HOSTS as readonly string[]).includes(host);
+}
+
+/** If message content is only a direct GIF URL and no embed shows it, return that URL to render as a synthetic embed. */
+function getSyntheticGifEmbedUrl(msg: MessageVM): string | null {
+  if (!msg.content?.trim() || !isDirectGifUrl(msg.content.trim())) return null;
+  const m = msg.content.trim().match(/^(https?:\/\/\S+)$/);
+  const url = m?.[1];
+  if (!url) return null;
+  const alreadyShown = msg.embeds.some(
+    (e) => e.image?.url === url || e.url === url || (e.video?.url === url)
+  );
+  return alreadyShown ? null : url;
+}
+
+/** Embeds to display: real embeds plus optionally one synthetic for a standalone direct GIF URL in content. */
+function getEmbedsToShow(msg: MessageVM): MessageVM['embeds'] {
+  const syntheticUrl = getSyntheticGifEmbedUrl(msg);
+  if (!syntheticUrl) return msg.embeds;
+  const synthetic: MessageVM['embeds'][0] = { url: syntheticUrl, image: { url: syntheticUrl }, fields: [] };
+  return [synthetic, ...msg.embeds];
 }
 
 /** Matches http(s) URLs for linkification. */
@@ -180,6 +261,47 @@ export const MessageList: React.FC<MessageListProps> = ({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [lightboxIsVideo, setLightboxIsVideo] = useState(false);
+  const [favoriteGifUrls, setFavoriteGifUrls] = useState<FavoriteGifEntry[]>([]);
+
+  const loadFavorites = useCallback(async () => {
+    const s = await window.aerocord.settings.get();
+    setFavoriteGifUrls(s.favoriteGifUrls ?? []);
+  }, []);
+
+  useEffect(() => {
+    loadFavorites();
+  }, [loadFavorites]);
+
+  const handleToggleGifFavorite = useCallback(
+    async (id: string, entryToAdd?: FavoriteGifEntry) => {
+      const s = await window.aerocord.settings.get();
+      const list = s.favoriteGifUrls ?? [];
+      const isFav = isUrlFavorited(id, list);
+      const next = isFav ? removeFavoriteEntry(list, id) : [...list, entryToAdd ?? id];
+      await window.aerocord.settings.update({ favoriteGifUrls: next });
+      setFavoriteGifUrls(next);
+    },
+    []
+  );
+
+  const gifStarVisibility = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>, visible: boolean) => {
+      const star = e.currentTarget.querySelector<HTMLElement>('.chat-message-gif-fav-star');
+      if (visible) star?.classList.add('visible');
+      else star?.classList.remove('visible');
+    },
+    []
+  );
+
+  const openLightbox = useCallback((url: string, isVideo: boolean) => {
+    setLightboxUrl(url);
+    setLightboxIsVideo(isVideo);
+  }, []);
+  const closeLightbox = useCallback(() => {
+    setLightboxUrl(null);
+    setLightboxIsVideo(false);
+  }, []);
   const editRef = useRef<HTMLTextAreaElement>(null);
   const internalScrollRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = forwardedScrollRef ?? internalScrollRef;
@@ -322,23 +444,57 @@ export const MessageList: React.FC<MessageListProps> = ({
                 </div>
               </div>
             ) : (
-              msg.content && <div className="chat-message-content">{renderMessageContent(msg.content, onUserClick, msg.mentions, msg.mentionRoles)}</div>
+              msg.content && !contentIsOnlyEmbedLink(msg) && (
+                <div className="chat-message-content">{renderMessageContent(msg.content, onUserClick, msg.mentions, msg.mentionRoles)}</div>
+              )
             )}
 
             {msg.attachments.length > 0 && (
               <div className="chat-message-attachments">
                 {msg.attachments.map(att => (
                   isImageAttachment(att.contentType, att.filename) ? (
-                    <img
-                      key={att.id}
-                      className="chat-message-attachment-image"
-                      src={att.url}
-                      alt={att.filename}
-                      onClick={() => setLightboxUrl(att.url)}
-                      role="button"
-                      tabIndex={0}
-                      onKeyDown={(e) => e.key === 'Enter' && setLightboxUrl(att.url)}
-                    />
+                    isGifAttachment(att.contentType, att.filename) ? (
+                      <div
+                        key={att.id}
+                        className="chat-message-attachment-image-wrap"
+                        onMouseEnter={(e) => gifStarVisibility(e, true)}
+                        onMouseLeave={(e) => gifStarVisibility(e, false)}
+                      >
+                        <img
+                          className="chat-message-attachment-image"
+                          src={att.url}
+                          alt={att.filename}
+                          onClick={() => openLightbox(att.url, false)}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(e) => e.key === 'Enter' && openLightbox(att.url, false)}
+                        />
+                        <button
+                          type="button"
+                          className={'chat-message-gif-fav-star' + (isUrlFavorited(att.url, favoriteGifUrls) ? ' chat-message-gif-fav-star-on' : '')}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleToggleGifFavorite(att.url);
+                          }}
+                          aria-label={isUrlFavorited(att.url, favoriteGifUrls) ? 'Remove from favorites' : 'Add to favorites'}
+                          title={isUrlFavorited(att.url, favoriteGifUrls) ? 'Remove from GIF favorites' : 'Add to GIF favorites'}
+                        >
+                          <img src={STAR_ICON_URL} alt="" />
+                        </button>
+                      </div>
+                    ) : (
+                      <img
+                        key={att.id}
+                        className="chat-message-attachment-image"
+                        src={att.url}
+                        alt={att.filename}
+                        onClick={() => openLightbox(att.url, false)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => e.key === 'Enter' && openLightbox(att.url, false)}
+                      />
+                    )
                   ) : (
                     <a
                       key={att.id}
@@ -354,44 +510,117 @@ export const MessageList: React.FC<MessageListProps> = ({
               </div>
             )}
 
-            {msg.embeds.map((embed, ei) => (
-              <div
-                key={ei}
-                className="chat-embed"
-                style={embed.color ? { borderLeftColor: embed.color } : undefined}
-              >
-                {embed.title && (
-                  <div className="chat-embed-title">
-                    {embed.url ? <a href={embed.url} target="_blank" rel="noreferrer">{embed.title}</a> : embed.title}
-                  </div>
-                )}
-                {embed.description && (
-                  <div className="chat-embed-description">{embed.description}</div>
-                )}
-                {embed.image && (
-                  <img
-                    className="chat-embed-image chat-embed-image-clickable"
-                    src={embed.image.url}
-                    alt=""
-                    onClick={() => setLightboxUrl(embed.image!.url)}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => e.key === 'Enter' && embed.image && setLightboxUrl(embed.image.url)}
-                  />
-                )}
-                {embed.thumbnail && !embed.image && (
-                  <img
-                    className="chat-embed-image chat-embed-image-clickable"
-                    src={embed.thumbnail.url}
-                    alt=""
-                    onClick={() => setLightboxUrl(embed.thumbnail!.url)}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => e.key === 'Enter' && embed.thumbnail && setLightboxUrl(embed.thumbnail.url)}
-                  />
-                )}
-              </div>
-            ))}
+            {getEmbedsToShow(msg).map((embed, ei) => {
+              const displayUrl = getEmbedDisplayUrl(embed);
+              const hasImageOrGifUrl = embed.image || (embed.url && isGifUrl(embed.url));
+              const isImageGif = hasImageOrGifUrl && isGifUrl(displayUrl);
+              const favId = getEmbedFavoriteId(embed);
+              const isFav = isUrlFavorited(favId, favoriteGifUrls);
+              const embedIsUrlGif = embed.url && isGifUrl(embed.url);
+
+              return (
+                <div
+                  key={ei}
+                  className="chat-embed"
+                  style={embed.color ? { borderLeftColor: embed.color } : undefined}
+                >
+                  {embed.title && (
+                    <div className="chat-embed-title">
+                      {embed.url ? <a href={embed.url} target="_blank" rel="noreferrer">{embed.title}</a> : embed.title}
+                    </div>
+                  )}
+                  {embed.description && (
+                    <div className="chat-embed-description">{embed.description}</div>
+                  )}
+                  {hasImageOrGifUrl && (
+                    isImageGif ? (
+                      <div
+                        className="chat-message-attachment-image-wrap"
+                        onMouseEnter={(e) => gifStarVisibility(e, true)}
+                        onMouseLeave={(e) => gifStarVisibility(e, false)}
+                      >
+                        <img
+                          className="chat-embed-image chat-embed-image-clickable"
+                          src={displayUrl}
+                          alt=""
+                          onClick={() => openLightbox(displayUrl, false)}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(e) => e.key === 'Enter' && openLightbox(displayUrl, false)}
+                        />
+                        <button
+                          type="button"
+                          className={'chat-message-gif-fav-star' + (isFav ? ' chat-message-gif-fav-star-on' : '')}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleToggleGifFavorite(favId, getEmbedFavoritePayload(embed));
+                          }}
+                          aria-label={isFav ? 'Remove from favorites' : 'Add to favorites'}
+                          title={isFav ? 'Remove from GIF favorites' : 'Add to GIF favorites'}
+                        >
+                          <img src={STAR_ICON_URL} alt="" />
+                        </button>
+                      </div>
+                    ) : (
+                      <img
+                        className="chat-embed-image chat-embed-image-clickable"
+                        src={displayUrl}
+                        alt=""
+                        onClick={() => openLightbox(displayUrl, false)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => e.key === 'Enter' && openLightbox(displayUrl, false)}
+                      />
+                    )
+                  )}
+                  {embed.video && !embed.image && !embedIsUrlGif && (
+                    <div
+                      className="chat-message-attachment-image-wrap"
+                      onMouseEnter={(e) => gifStarVisibility(e, true)}
+                      onMouseLeave={(e) => gifStarVisibility(e, false)}
+                    >
+                      <video
+                        className="chat-embed-image chat-embed-image-clickable"
+                        src={embed.video.url}
+                        autoPlay
+                        loop
+                        muted
+                        playsInline
+                        onClick={() => openLightbox(embed.video!.url, true)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => e.key === 'Enter' && embed.video && openLightbox(embed.video!.url, true)}
+                      />
+                      <button
+                        type="button"
+                        className={'chat-message-gif-fav-star' + (isFav ? ' chat-message-gif-fav-star-on' : '')}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleToggleGifFavorite(favId, getEmbedFavoritePayload(embed));
+                        }}
+                        aria-label={isFav ? 'Remove from favorites' : 'Add to favorites'}
+                        title={isFav ? 'Remove from GIF favorites' : 'Add to GIF favorites'}
+                      >
+                        <img src={STAR_ICON_URL} alt="" />
+                      </button>
+                    </div>
+                  )}
+                  {embed.thumbnail && !embed.image && !embed.video && !embedIsUrlGif && (
+                    <img
+                      className="chat-embed-image chat-embed-image-clickable"
+                      src={embed.thumbnail.url}
+                      alt=""
+                      onClick={() => openLightbox(embed.thumbnail!.url, false)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => e.key === 'Enter' && embed.thumbnail && openLightbox(embed.thumbnail!.url, false)}
+                    />
+                  )}
+                </div>
+              );
+            })}
           </div>
         );
       })}
@@ -414,7 +643,7 @@ export const MessageList: React.FC<MessageListProps> = ({
       )}
 
       {lightboxUrl && (
-        <ImageLightbox imageUrl={lightboxUrl} onClose={() => setLightboxUrl(null)} />
+        <ImageLightbox imageUrl={lightboxUrl} isVideo={lightboxIsVideo} onClose={closeLightbox} />
       )}
     </div>
   );

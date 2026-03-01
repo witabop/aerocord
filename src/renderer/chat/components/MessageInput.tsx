@@ -286,8 +286,10 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     }
   }, [replyTarget]);
 
+  const inputAreaRef = useRef<HTMLDivElement>(null);
+
   return (
-    <div className="chat-input-area no-drag">
+    <div ref={inputAreaRef} className="chat-input-area no-drag">
       {replyTarget && (
         <div className="chat-reply-bar">
           <span>Replying to <strong>{replyTarget.author.name}</strong></span>
@@ -367,12 +369,14 @@ export const MessageInput: React.FC<MessageInputProps> = ({
 
       <EmojiBoard
         visible={emojiBoardOpen}
+        anchorRef={inputAreaRef}
         onClose={() => setEmojiBoardOpen(false)}
         onSelect={handleEmojiSelect}
       />
 
       <GifBoard
         visible={gifBoardOpen}
+        anchorRef={inputAreaRef}
         onClose={() => setGifBoardOpen(false)}
         onSelectGif={(filename) => {
           onSendGif?.(filename);

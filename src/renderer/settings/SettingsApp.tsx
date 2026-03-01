@@ -129,6 +129,27 @@ export const SettingsApp: React.FC = () => {
                   </select>
                 </div>
               </div>
+              <div className="settings-row">
+                <div className="settings-slider-row">
+                  <span>Noise gate (dB)</span>
+                  <div className="settings-slider-wrap">
+                    <input
+                      type="range"
+                      className="settings-slider no-drag"
+                      min={-60}
+                      max={0}
+                      step={1}
+                      value={settings.noiseGateDb ?? -60}
+                      style={{ '--slider-pct': `${((settings.noiseGateDb ?? -60) + 60) / 60 * 100}%` } as React.CSSProperties}
+                      onChange={(e) => handleChange('noiseGateDb', parseFloat(e.target.value))}
+                    />
+                    <span className="settings-slider-label">
+                      {(settings.noiseGateDb ?? -60) === -60 ? 'Off' : `${settings.noiseGateDb ?? -60} dB`}
+                    </span>
+                  </div>
+                </div>
+                <div className="settings-hint">Only transmit when audio is above this level. Off = allow all.</div>
+              </div>
             </>
           ) : (
             filteredSettings.map(def => (

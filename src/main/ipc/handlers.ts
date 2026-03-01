@@ -8,6 +8,7 @@ import { registerDiscordEvents, markRecentlyUnfriended } from '../discord/events
 import { voiceManager } from '../discord/voice';
 import { settingsManager } from '../services/settings';
 import { themeService } from '../services/theme';
+import { fetchTrendingGifs, searchGifs, hasApiKeys } from '../services/klipy';
 import { windowManager } from '../windows/manager';
 
 export function registerIPCHandlers(): void {
@@ -128,16 +129,54 @@ export function registerIPCHandlers(): void {
     return discordClient.getMessagesBefore(channelId, beforeId, limit);
   });
 
-  ipcMain.handle(IPC.MESSAGES_SEND, async (_e, channelId: string, content: string, attachmentPaths?: string[]) => {
-    let resolvedPaths = attachmentPaths;
-    if (attachmentPaths?.length) {
+  ipcMain.handle(
+    IPC.MESSAGES_SEND,
+    async (
+      _e,
+      channelId: string,
+      content: string,
+      attachmentPaths?: string[],
+      attachmentUrls?: string[]
+    ) => {
       const assetsPath = await getAssetsPath();
-      resolvedPaths = attachmentPaths.map((p) =>
-        path.isAbsolute(p) ? p : path.join(assetsPath, p.replace(/^\//, ''))
-      );
+      const paths: string[] = [];
+      if (attachmentPaths?.length) {
+        for (const p of attachmentPaths) {
+          paths.push(
+            path.isAbsolute(p) ? p : path.join(assetsPath, p.replace(/^\//, ''))
+          );
+        }
+      }
+      const tempFiles: string[] = [];
+      if (attachmentUrls?.length) {
+        for (const url of attachmentUrls) {
+          try {
+            const res = await fetch(url);
+            if (!res.ok) continue;
+            const buf = Buffer.from(await res.arrayBuffer());
+            const ext = path.extname(new URL(url).pathname) || '.gif';
+            const tmp = path.join(os.tmpdir(), `aerocord-gif-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
+            fs.writeFileSync(tmp, buf);
+            tempFiles.push(tmp);
+            paths.push(tmp);
+          } catch {
+            // skip failed download
+          }
+        }
+      }
+      try {
+        return await discordClient.sendMessage(channelId, content, paths.length ? paths : undefined);
+      } finally {
+        for (const tmp of tempFiles) {
+          try {
+            fs.unlinkSync(tmp);
+          } catch {
+            /* ignore */
+          }
+        }
+      }
     }
-    return discordClient.sendMessage(channelId, content, resolvedPaths);
-  });
+  );
 
   ipcMain.handle(IPC.MESSAGES_EDIT, async (_e, channelId: string, messageId: string, content: string) => {
     return discordClient.editMessage(channelId, messageId, content);
@@ -257,6 +296,9 @@ export function registerIPCHandlers(): void {
 
   ipcMain.handle(IPC.SETTINGS_UPDATE, async (_e, partial: Record<string, unknown>) => {
     settingsManager.update(partial as any);
+    if ('noiseGateDb' in partial && typeof partial.noiseGateDb === 'number') {
+      voiceManager.setNoiseGateDb(partial.noiseGateDb);
+    }
   });
 
   // ---- Theme ----
@@ -294,6 +336,16 @@ export function registerIPCHandlers(): void {
     } catch {
       return [];
     }
+  });
+
+  ipcMain.handle(IPC.GIFS_HAS_KEYS, async () => hasApiKeys());
+
+  ipcMain.handle(IPC.GIFS_FETCH_TRENDING, async (_e, limit?: number) => {
+    return fetchTrendingGifs(limit ?? 24);
+  });
+
+  ipcMain.handle(IPC.GIFS_SEARCH, async (_e, q: string, limit?: number) => {
+    return searchGifs(q, limit ?? 24);
   });
 
   // ---- Dialog / Files ----

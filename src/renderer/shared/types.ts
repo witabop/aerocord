@@ -65,6 +65,8 @@ export interface EmbedVM {
   author?: { name: string; url?: string; iconUrl?: string };
   thumbnail?: { url: string; width?: number; height?: number };
   image?: { url: string; width?: number; height?: number };
+  /** GIFV / Tenor-style embeds: animated content URL (may be .mp4 or .gif) */
+  video?: { url: string; width?: number; height?: number };
   footer?: { text: string; iconUrl?: string };
   fields: { name: string; value: string; inline: boolean }[];
 }
@@ -170,8 +172,13 @@ export interface SettingsData {
   inputDeviceIndex: number;
   audioInputDeviceId: string;
   audioOutputDeviceId: string;
+  noiseGateDb: number;
+  /** GIF URLs, "local:gifs/filename", or { link, displayUrl } for embed GIFs (e.g. Tenor) so we send the link but display the media. */
+  favoriteGifUrls: FavoriteGifEntry[];
   selectedChannels?: Record<string, string>;
 }
+
+export type FavoriteGifEntry = string | { link: string; displayUrl: string };
 
 export interface NotificationData {
   type: 'signOn' | 'message' | 'friendRequest';
@@ -228,7 +235,7 @@ export interface AerocordAPI {
   messages: {
     get(channelId: string): Promise<MessageVM[]>;
     getBefore(channelId: string, beforeId: string, limit?: number): Promise<MessageVM[]>;
-    send(channelId: string, content: string, attachmentPaths?: string[]): Promise<{ success: boolean; error?: string }>;
+    send(channelId: string, content: string, attachmentPaths?: string[], attachmentUrls?: string[]): Promise<{ success: boolean; error?: string }>;
     edit(channelId: string, messageId: string, content: string): Promise<boolean>;
     delete(channelId: string, messageId: string): Promise<boolean>;
     triggerTyping(channelId: string): Promise<void>;
@@ -271,6 +278,11 @@ export interface AerocordAPI {
   assets: {
     getPath(): Promise<string>;
     listGifs(): Promise<string[]>;
+  };
+  gifs: {
+    hasKeys(): Promise<boolean>;
+    fetchTrending(limit?: number): Promise<{ id: string; url: string; fullUrl?: string }[]>;
+    search(q: string, limit?: number): Promise<{ id: string; url: string; fullUrl?: string }[]>;
   };
   dialog: {
     pickFiles(options: { type: 'images' | 'files'; maxSizeBytes?: number }): Promise<

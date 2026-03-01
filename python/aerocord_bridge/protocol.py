@@ -111,32 +111,51 @@ class JsonRpcRouter:
             traceback.print_exc(file=sys.stderr)
 
 
-def _blocking_readline() -> str | None:
-    """Read one line from stdin (blocking). Returns None on EOF."""
-    try:
-        line = sys.stdin.buffer.readline()
-        if not line:
-            return None
-        return line.decode("utf-8", errors="replace").strip()
-    except (EOFError, OSError):
-        return None
-
-
 _audio_chunk_handler: Any = None
 
 
 def set_audio_chunk_handler(handler: Any) -> None:
     """Register a synchronous handler for voiceAudioChunk messages.
 
-    Called inline in the stdin reader to bypass asyncio task scheduling
-    and minimise latency on the outgoing-audio hot path.
+    The handler is called directly in the stdin reader thread so audio
+    never waits for the event loop to schedule it.
     """
     global _audio_chunk_handler
     _audio_chunk_handler = handler
 
 
+def _blocking_readline() -> str | None:
+    """Read lines from stdin. Audio chunks are handled inline in the reader
+    thread to avoid event-loop scheduling delay; only non-audio lines are
+    returned to the caller."""
+    while True:
+        try:
+            line = sys.stdin.buffer.readline()
+            if not line:
+                return None
+            text = line.decode("utf-8", errors="replace").strip()
+            if not text:
+                continue
+        except (EOFError, OSError):
+            return None
+
+        if _audio_chunk_handler and '"voiceAudioChunk"' in text:
+            try:
+                msg = json.loads(text)
+                if msg.get("method") == "voiceAudioChunk":
+                    pcm = msg.get("params", {}).get("pcm")
+                    if pcm:
+                        _audio_chunk_handler(pcm)
+                    continue
+            except Exception:
+                pass
+
+        return text
+
+
 async def stdin_reader(router: JsonRpcRouter) -> None:
-    """Read NDJSON lines from stdin via a thread and dispatch to the router."""
+    """Read NDJSON lines from stdin via a thread and dispatch to the router.
+    Audio chunks are handled entirely in the reader thread and never reach here."""
     loop = asyncio.get_event_loop()
 
     while True:
@@ -149,13 +168,6 @@ async def stdin_reader(router: JsonRpcRouter) -> None:
             msg = json.loads(line_str)
         except json.JSONDecodeError:
             print(f"[bridge] Invalid JSON: {line_str}", file=sys.stderr)
-            continue
-
-        # Fast-path: outgoing audio chunks handled inline (no task)
-        if msg.get("method") == "voiceAudioChunk" and _audio_chunk_handler:
-            pcm = msg.get("params", {}).get("pcm")
-            if pcm:
-                _audio_chunk_handler(pcm)
             continue
 
         msg_type = msg.get("type", "request")

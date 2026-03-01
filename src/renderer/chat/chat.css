@@ -580,6 +580,56 @@
   margin-top: 4px;
 }
 
+.chat-message-attachment-image-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+.chat-message-gif-fav-star {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.35);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.chat-message-attachment-image-wrap:hover .chat-message-gif-fav-star,
+.chat-embed .chat-message-attachment-image-wrap:hover .chat-message-gif-fav-star,
+.chat-message-gif-fav-star.visible,
+.chat-message-gif-fav-star:hover {
+  opacity: 1;
+}
+
+.chat-message-gif-fav-star img {
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+}
+
+/* Dim star when not favorited, bright when favorited */
+.chat-message-gif-fav-star:not(.chat-message-gif-fav-star-on) img {
+  opacity: 0.45;
+}
+
+.chat-message-gif-fav-star.chat-message-gif-fav-star-on {
+  background: rgba(255, 220, 100, 0.5);
+}
+
+.chat-message-gif-fav-star.chat-message-gif-fav-star-on img {
+  opacity: 1;
+}
+
 .chat-message-attachment-image {
   max-width: 300px;
   max-height: 200px;
@@ -1406,11 +1456,27 @@
   text-decoration: underline;
 }
 
-/* ---- Emoji Board ---- */
+/* ---- Emoji Board (portaled to body, on top of everything) ---- */
+.emoji-board-overlay.emoji-board-portal-layer {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 2147483646;
+}
+
+.emoji-board-portal-anchor {
+  position: fixed;
+  z-index: 2147483647;
+  pointer-events: none;
+}
+
+.emoji-board-portal-anchor .emoji-board {
+  pointer-events: auto;
+}
+
 .emoji-board-overlay {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
-  z-index: 9998;
+  z-index: 2147483646;
 }
 
 .emoji-board {
@@ -1423,7 +1489,7 @@
   border: 1px solid #7f9db9;
   border-radius: 3px;
   box-shadow: 2px 2px 6px rgba(0,0,0,0.15);
-  z-index: 9999;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   max-height: 280px;
@@ -1491,11 +1557,27 @@
   cursor: pointer;
 }
 
-/* ---- GIF Board ---- */
+/* ---- GIF Board (portaled to body, on top of everything) ---- */
+.gif-board-overlay.gif-board-portal-layer {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 2147483646;
+}
+
+.gif-board-portal-anchor {
+  position: fixed;
+  z-index: 2147483647;
+  pointer-events: none;
+}
+
+.gif-board-portal-anchor .gif-board {
+  pointer-events: auto;
+}
+
 .gif-board-overlay {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
-  z-index: 9998;
+  z-index: 2147483646;
 }
 
 .gif-board {
@@ -1508,7 +1590,7 @@
   border: 1px solid #7f9db9;
   border-radius: 3px;
   box-shadow: 2px 2px 6px rgba(0,0,0,0.15);
-  z-index: 9999;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   max-height: 320px;
@@ -1529,26 +1611,95 @@
   color: #1a1a1a;
 }
 
-.gif-board-favorites {
-  flex-shrink: 0;
+.gif-board-tabs {
+  display: flex;
+  gap: 2px;
+}
+
+.gif-board-tab {
+  font-size: 10px;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: transparent;
+  color: #555;
+  cursor: pointer;
+}
+
+.gif-board-tab:hover {
+  background: #e8ecf0;
+}
+
+.gif-board-tab-active {
+  background: #dcebfc !important;
+  border-color: #a8c8e8;
+  color: #1a1a1a;
+}
+
+.gif-board-web-search {
+  display: flex;
+  gap: 6px;
   padding: 6px 10px;
   border-bottom: 1px solid #e8ecf0;
 }
 
-.gif-board-favorites-label {
-  font-size: 10px;
-  font-weight: 600;
-  color: #555;
-  display: block;
-  margin-bottom: 4px;
+.gif-board-search-input {
+  flex: 1;
+  font-size: 11px;
+  padding: 4px 8px;
+  border: 1px solid #b0bcc8;
+  border-radius: 2px;
 }
 
-.gif-board-favorites-placeholder {
-  min-height: 44px;
-  background: #f4f6f8;
-  border: 1px dashed #b0bcc8;
+.gif-board-search-btn {
+  font-size: 10px;
+  padding: 4px 10px;
+  border: 1px solid #7f9db9;
   border-radius: 2px;
-  /* Room for favorite gifs; external URLs (e.g. from chat) can be added later via right-click */
+  background: #e8f0f8;
+  cursor: pointer;
+}
+
+.gif-board-search-btn:hover {
+  background: #dcebfc;
+}
+
+.gif-board-item-wrap {
+  position: relative;
+}
+
+.gif-board-fav-star {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.35);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+  transition: opacity 0.15s ease;
+}
+
+.gif-board-fav-star img {
+  width: 12px;
+  height: 12px;
+  max-width: none;
+  max-height: none;
+  object-fit: contain;
+}
+
+.gif-board-fav-star:hover {
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.gif-board-fav-star-on {
+  background: rgba(255, 220, 100, 0.5);
 }
 
 .gif-board-grid {
@@ -1586,11 +1737,24 @@
   border-color: #a8c8e8;
 }
 
-.gif-board-item img {
+.gif-board-item img,
+.gif-board-item video {
   max-width: 44px;
   max-height: 44px;
   object-fit: contain;
   image-rendering: auto;
+}
+
+/* Larger previews in the Favorites tab */
+.gif-board-grid-favorites .gif-board-item {
+  width: 88px;
+  height: 88px;
+}
+
+.gif-board-grid-favorites .gif-board-item img,
+.gif-board-grid-favorites .gif-board-item video {
+  max-width: 82px;
+  max-height: 82px;
 }
 
 .gif-board-status {

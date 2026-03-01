@@ -153,6 +153,23 @@ export const ChatApp: React.FC = () => {
     setIsLoadingMoreMessages(false);
   }, [channelId, isLoadingMoreMessages, hasMoreMessages, messages]);
 
+  // When opened from a notification, the hash may not be available on first paint. Re-read until we have a channelId.
+  useEffect(() => {
+    if (channelId) return;
+    const applyHash = () => {
+      const id = getChannelIdFromHash();
+      if (id) setChannelId(id);
+    };
+    applyHash();
+    const t = setTimeout(applyHash, 0);
+    const onHashChange = () => applyHash();
+    window.addEventListener('hashchange', onHashChange);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener('hashchange', onHashChange);
+    };
+  }, [channelId]);
+
   useEffect(() => {
     if (channelId) loadChannel(channelId);
   }, [channelId, loadChannel]);
@@ -220,11 +237,13 @@ export const ChatApp: React.FC = () => {
   }, [channelId]);
 
   useEffect(() => {
-    const wasAtBottom = (() => {
-      const el = document.querySelector('.chat-messages');
-      if (!el) return true;
-      return el.scrollHeight - el.scrollTop - el.clientHeight < 100;
-    })();
+    const scrollEl = document.querySelector('.chat-messages') as HTMLElement | null;
+    const distanceFromBottom = scrollEl
+      ? scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight
+      : 0;
+    /** When a new message just arrived, use a generous threshold so we still auto-scroll when the new message is tall (e.g. embed GIF from another user) and already laid out. */
+    const newMessageArrived = messages.length > prevMessageCountRef.current;
+    const wasNearBottomForNewMessage = distanceFromBottom < 500;
 
     const messagesBelongToCurrentChannel =
       messages.length > 0 && messages[0].channelId === channelId;
@@ -236,31 +255,98 @@ export const ChatApp: React.FC = () => {
     if (shouldScrollToBottomOnLoad) {
       pendingScrollChannelIdRef.current = null;
       initialLoadRef.current = false;
+      const el = scrollEl;
       const scrollToBottom = () => {
-        const el = document.querySelector('.chat-messages');
-        if (el) {
-          el.scrollTop = el.scrollHeight;
+        const target = document.querySelector('.chat-messages');
+        if (target) {
+          target.scrollTop = target.scrollHeight;
         }
         messagesEndRef.current?.scrollIntoView({ behavior: 'instant' as ScrollBehavior });
       };
+      const stickToBottom = () => {
+        const target = document.querySelector('.chat-messages');
+        if (!target) return;
+        const fromBottom = target.scrollHeight - target.scrollTop - target.clientHeight;
+        if (fromBottom > 80) {
+          target.scrollTop = target.scrollHeight;
+          messagesEndRef.current?.scrollIntoView({ behavior: 'instant' as ScrollBehavior });
+        }
+      };
+      const delays = [200, 500, 1000, 2000, 3000];
+      const timers = delays.map((ms) => setTimeout(scrollToBottom, ms));
+      const interval = setInterval(stickToBottom, 200);
+      const stopInterval = setTimeout(() => clearInterval(interval), 3500);
+      const cleanup = () => {
+        timers.forEach((t) => clearTimeout(t));
+        clearInterval(interval);
+        clearTimeout(stopInterval);
+      };
+      let lastScrollTop = el?.scrollTop ?? 0;
+      const onScroll = () => {
+        if (!el) return;
+        const current = el.scrollTop;
+        if (current < lastScrollTop) {
+          cleanup();
+          el.removeEventListener('scroll', onScroll);
+        }
+        lastScrollTop = current;
+      };
+      el?.addEventListener('scroll', onScroll, { passive: true });
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           requestAnimationFrame(scrollToBottom);
         });
       });
-    } else if (messages.length > prevMessageCountRef.current && wasAtBottom) {
+      return () => {
+        cleanup();
+        el?.removeEventListener('scroll', onScroll);
+      };
+    } else if (newMessageArrived && wasNearBottomForNewMessage) {
+      const el = messagesScrollRef.current;
       const scrollToBottom = () => {
-        const el = messagesScrollRef.current;
-        if (!el) return;
-        const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
+        const target = messagesScrollRef.current;
+        if (!target) return;
+        const nearBottom = target.scrollHeight - target.scrollTop - target.clientHeight < 150;
         if (!nearBottom) return;
-        el.scrollTop = el.scrollHeight;
+        target.scrollTop = target.scrollHeight;
         messagesEndRef.current?.scrollIntoView({ behavior: 'instant' as ScrollBehavior });
       };
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-      const delays = [100, 350, 700];
+      /** Keep scrolling to bottom when content grows (e.g. embed GIFs loading) for a short period. */
+      const stickToBottom = () => {
+        const target = messagesScrollRef.current;
+        if (!target) return;
+        const fromBottom = target.scrollHeight - target.scrollTop - target.clientHeight;
+        if (fromBottom > 80) {
+          target.scrollTop = target.scrollHeight;
+          messagesEndRef.current?.scrollIntoView({ behavior: 'instant' as ScrollBehavior });
+        }
+      };
+      const delays = [100, 350, 700, 1200, 2000, 3000];
       const timers = delays.map((ms) => setTimeout(scrollToBottom, ms));
-      return () => timers.forEach((t) => clearTimeout(t));
+      const interval = setInterval(stickToBottom, 200);
+      const stopInterval = setTimeout(() => clearInterval(interval), 3500);
+      const cleanup = () => {
+        timers.forEach((t) => clearTimeout(t));
+        clearInterval(interval);
+        clearTimeout(stopInterval);
+      };
+      let lastScrollTop = el?.scrollTop ?? 0;
+      const onScroll = () => {
+        const target = messagesScrollRef.current;
+        if (!target) return;
+        const current = target.scrollTop;
+        if (current < lastScrollTop) {
+          cleanup();
+          target.removeEventListener('scroll', onScroll);
+        }
+        lastScrollTop = current;
+      };
+      el?.addEventListener('scroll', onScroll, { passive: true });
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      return () => {
+        cleanup();
+        el?.removeEventListener('scroll', onScroll);
+      };
     }
     prevMessageCountRef.current = messages.length;
   }, [messages, channelId]);
@@ -594,7 +680,7 @@ export const ChatApp: React.FC = () => {
       console.log('[Audio] Native sample rate:', nativeRate, 'resample ratio:', resampleRatio.toFixed(4));
 
       const source = ctx.createMediaStreamSource(stream);
-      const processor = ctx.createScriptProcessor(1024, 1, 1);
+      const processor = ctx.createScriptProcessor(4096, 1, 1);
       workletNodeRef.current = processor;
 
       let callCount = 0;
@@ -604,9 +690,9 @@ export const ChatApp: React.FC = () => {
         const now = performance.now();
         if (callCount === 0) firstCallTime = now;
         callCount++;
-        if (callCount === 50) {
+        if (callCount === 12) {
           const elapsed = now - firstCallTime;
-          const effectiveRate = Math.round((1024 * 49) / (elapsed / 1000));
+          const effectiveRate = Math.round((4096 * 11) / (elapsed / 1000));
           console.log('[Audio] Measured effective sample rate:', effectiveRate, 'Hz (expected', nativeRate, ')');
           callCount = 0;
         }
@@ -819,10 +905,14 @@ export const ChatApp: React.FC = () => {
   );
 
   const handleSendGif = useCallback(
-    async (filename: string) => {
+    async (id: string) => {
       if (!channelId) return;
       setSendError(null);
-      const result = await window.aerocord.messages.send(channelId, '', [`gifs/${filename}`]);
+      const isUrl = id.startsWith('http://') || id.startsWith('https://');
+      // For links (e.g. Tenor/Giphy), send the link as message content so it embeds; don't send as attachment.
+      const result = isUrl
+        ? await window.aerocord.messages.send(channelId, id)
+        : await window.aerocord.messages.send(channelId, '', [id]);
       if (result.success) {
         setReplyTarget(null);
       } else {

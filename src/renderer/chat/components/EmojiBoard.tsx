@@ -1,8 +1,10 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useLayoutEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { assetUrl } from '../../shared/hooks/useAssets';
 
 interface EmojiBoardProps {
   visible: boolean;
+  anchorRef: React.RefObject<HTMLElement | null>;
   onClose: () => void;
   onSelect: (emojiCode: string) => void;
 }
@@ -91,8 +93,18 @@ const EMOJI_LIST: Array<{ file: string; code: string; name: string }> = [
   { file: 'WLM.png', code: ':wave:', name: 'WLM' },
 ];
 
-export const EmojiBoard: React.FC<EmojiBoardProps> = ({ visible, onClose, onSelect }) => {
+export const EmojiBoard: React.FC<EmojiBoardProps> = ({ visible, anchorRef, onClose, onSelect }) => {
   const [hoveredEmoji, setHoveredEmoji] = useState<string | null>(null);
+  const [position, setPosition] = useState<{ bottom: number; left: number }>({ bottom: 0, left: 0 });
+
+  useLayoutEffect(() => {
+    if (!visible || !anchorRef?.current) return;
+    const rect = anchorRef.current.getBoundingClientRect();
+    setPosition({
+      bottom: window.innerHeight - rect.top,
+      left: rect.left,
+    });
+  }, [visible, anchorRef]);
 
   const handleSelect = useCallback((code: string) => {
     onSelect(code);
@@ -100,10 +112,11 @@ export const EmojiBoard: React.FC<EmojiBoardProps> = ({ visible, onClose, onSele
 
   if (!visible) return null;
 
-  return (
+  const content = (
     <>
-      <div className="emoji-board-overlay" onClick={onClose} />
-      <div className="emoji-board">
+      <div className="emoji-board-overlay emoji-board-portal-layer" onClick={onClose} />
+      <div className="emoji-board-portal-anchor" style={{ bottom: position.bottom, left: position.left }}>
+        <div className="emoji-board">
         <div className="emoji-board-header">
           <span className="emoji-board-title">Your emoticons</span>
         </div>
@@ -123,6 +136,9 @@ export const EmojiBoard: React.FC<EmojiBoardProps> = ({ visible, onClose, onSele
         </div>
         <div className="emoji-board-status">{hoveredEmoji ?? '\u00A0'}</div>
       </div>
+      </div>
     </>
   );
+
+  return createPortal(content, document.body);
 };

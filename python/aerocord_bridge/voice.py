@@ -3,20 +3,22 @@ Voice connection and DM call handling.
 Audio data is exchanged as base64-encoded PCM over the NDJSON channel.
 Speaking detection and audio receiving use a custom VoiceClient subclass
 that hooks into the voice WebSocket and UDP socket.
+Noise gate is applied to outgoing mic audio (gate uses unboosted level).
 """
 
 from __future__ import annotations
 
-import array
 import asyncio
 import base64
+import collections
 import json
+import math
 import os
 import struct
 import sys
 import threading
 import traceback
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 import discord
 import nacl.bindings
@@ -364,6 +366,8 @@ class VoiceBridge:
         self._call_channel_id: Optional[str] = None
         self._audio_source: Optional[_PCMStreamSource] = None
         self._audio_receiver: Optional[_AudioReceiver] = None
+        self._noise_gate_db: float = -40.0
+        self._gate_release_remaining_sec: float = 0.0
 
     @property
     def current_channel_id(self) -> Optional[str]:
@@ -584,12 +588,18 @@ class VoiceBridge:
     def get_user_muted(self, user_id: str) -> bool:
         return user_id in self._user_muted
 
+    def set_noise_gate_db(self, db: float) -> None:
+        self._noise_gate_db = max(-60.0, min(0.0, float(db)))
+
     def receive_audio_chunk(self, pcm_b64: str) -> None:
-        """Receive a base64-encoded PCM chunk from the renderer and feed into voice."""
+        """Called from the stdin reader thread. Gate + volume + feed directly."""
         if self._self_muted or not self._audio_source:
             return
         try:
             pcm = base64.b64decode(pcm_b64)
+            pcm, self._gate_release_remaining_sec = _apply_noise_gate_with_release(
+                pcm, self._noise_gate_db, self._gate_release_remaining_sec
+            )
             if self._input_volume != 1.0:
                 pcm = _apply_volume_fast(pcm, self._input_volume)
             self._audio_source.feed(pcm)
@@ -604,6 +614,7 @@ class VoiceBridge:
             print(f"[voice] Failed to start audio playback: {e}", file=sys.stderr)
 
     def _cleanup_audio(self) -> None:
+        self._gate_release_remaining_sec = 0.0
         if self._voice_client:
             try:
                 self._voice_client.stop()
@@ -613,31 +624,34 @@ class VoiceBridge:
 
 
 class _PCMStreamSource(discord.AudioSource):
-    """AudioSource that streams PCM data written via feed().
-    Buffer is capped to prevent latency buildup during rapid speech.
+    """AudioSource fed by the stdin reader thread and read by the discord player thread.
+
+    Uses a deque of exactly-3840-byte frames so read() is O(1) (no memmove).
+    A small partial-byte buffer handles non-frame-aligned incoming chunks.
+    maxlen on the deque auto-discards oldest frames on overflow.
     """
 
     FRAME_SIZE = 3840  # 20ms of 48kHz 16-bit stereo
-    MAX_BUFFER = FRAME_SIZE * 15  # ~300ms headroom
+    _MAX_FRAMES = 50   # ~1s headroom
     _SILENCE = b"\x00" * FRAME_SIZE
 
     def __init__(self) -> None:
-        self._buffer = bytearray()
+        self._frames: collections.deque = collections.deque(maxlen=self._MAX_FRAMES)
+        self._partial = bytearray()
         self._lock = threading.Lock()
 
     def feed(self, data: bytes) -> None:
         with self._lock:
-            self._buffer.extend(data)
-            overflow = len(self._buffer) - self.MAX_BUFFER
-            if overflow > 0:
-                del self._buffer[:overflow]
+            self._partial.extend(data)
+            fs = self.FRAME_SIZE
+            while len(self._partial) >= fs:
+                self._frames.append(bytes(self._partial[:fs]))
+                del self._partial[:fs]
 
     def read(self) -> bytes:
         with self._lock:
-            if len(self._buffer) >= self.FRAME_SIZE:
-                frame = bytes(self._buffer[:self.FRAME_SIZE])
-                del self._buffer[:self.FRAME_SIZE]
-                return frame
+            if self._frames:
+                return self._frames.popleft()
         return self._SILENCE
 
     def is_opus(self) -> bool:
@@ -645,22 +659,60 @@ class _PCMStreamSource(discord.AudioSource):
 
     def cleanup(self) -> None:
         with self._lock:
-            self._buffer.clear()
+            self._frames.clear()
+            self._partial.clear()
 
 
 def _apply_volume_fast(buf: bytes, volume: float) -> bytes:
-    """Scale 16-bit LE PCM samples by *volume* using the array module."""
-    samples = array.array("h")
-    samples.frombytes(buf)
-    vol_i = int(volume * 65536)
-    for i in range(len(samples)):
-        s = (samples[i] * vol_i) >> 16
-        if s > 32767:
-            s = 32767
-        elif s < -32768:
-            s = -32768
-        samples[i] = s
-    return samples.tobytes()
+    """Scale 16-bit LE PCM samples by *volume*. Uses struct for C-speed unpack/pack."""
+    n = len(buf) >> 1
+    if n == 0:
+        return buf
+    fmt = f"<{n}h"
+    raw = struct.unpack(fmt, buf)
+    v = int(volume * 256)
+    return struct.pack(fmt, *(max(-32768, min(32767, (s * v) >> 8)) for s in raw))
+
+
+# --- Noise gate: 16-bit stereo PCM -> RMS in dB; gate below threshold with release ---
+_GATE_RELEASE_SEC = 0.35  # Keep gate open briefly after level drops so sentence endings aren't clipped
+_GATE_SILENCE_BUF = b"\x00" * 32768  # Pre-allocated; covers chunks up to 4096-sample stereo
+
+def _pcm_stereo_rms_dbfs(pcm: bytes) -> float:
+    """Compute RMS of 16-bit LE stereo PCM, return dB FS. Uses struct.unpack + sum() for speed."""
+    n = len(pcm) >> 1
+    if n == 0:
+        return -100.0
+    raw = struct.unpack(f"<{n}h", pcm)
+    sum_sq = sum(s * s for s in raw)
+    if sum_sq == 0:
+        return -100.0
+    rms_sq = sum_sq / (n * 1073741824.0)  # 32768^2
+    return 10.0 * math.log10(rms_sq) if rms_sq > 1e-20 else -100.0
+
+
+def _chunk_duration_sec(pcm: bytes) -> float:
+    """Duration in seconds of 48kHz 16-bit stereo PCM."""
+    return len(pcm) / (48000.0 * 4.0)
+
+
+def _apply_noise_gate_with_release(
+    pcm: bytes, threshold_db: float, release_remaining_sec: float
+) -> Tuple[bytes, float]:
+    """Apply noise gate with release: keep passing audio for release_remaining_sec after level drops.
+    Returns (output_pcm, next_release_remaining_sec)."""
+    if threshold_db <= -59.0:
+        return pcm, 0.0
+    duration_sec = _chunk_duration_sec(pcm)
+    db = _pcm_stereo_rms_dbfs(pcm)
+    if db >= threshold_db:
+        return pcm, _GATE_RELEASE_SEC
+    if release_remaining_sec > 0:
+        release_remaining_sec = max(0.0, release_remaining_sec - duration_sec)
+        return pcm, release_remaining_sec
+    if len(pcm) <= len(_GATE_SILENCE_BUF):
+        return _GATE_SILENCE_BUF[:len(pcm)], 0.0
+    return b"\x00" * len(pcm), 0.0
 
 
 voice_bridge = VoiceBridge()

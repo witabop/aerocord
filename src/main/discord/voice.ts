@@ -14,6 +14,7 @@ class VoiceManager {
   private _selfMuted = false;
   private _selfDeafened = false;
   private _inputVolume = 1.0;
+  private _noiseGateDb = -40;
   private _userVolumes: Map<string, number> = new Map();
   private _userMuted: Set<string> = new Set();
   private _callState: CallState = 'idle';
@@ -142,6 +143,11 @@ class VoiceManager {
 
   getInputVolume(): number {
     return this._inputVolume;
+  }
+
+  setNoiseGateDb(db: number): void {
+    this._noiseGateDb = Math.max(-60, Math.min(0, db));
+    pythonBridge.fire('voiceSetNoiseGateDb', { db: this._noiseGateDb });
   }
 
   setUserVolume(userId: string, volume: number): void {

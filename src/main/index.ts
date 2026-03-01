@@ -1,5 +1,6 @@
-import { app, BrowserWindow, protocol, net, session } from 'electron';
 import * as path from 'path';
+
+import { app, BrowserWindow, protocol, net, session } from 'electron';
 import * as url from 'url';
 import { settingsManager } from './services/settings';
 import { discordClient } from './discord/client';
@@ -19,6 +20,10 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 app.on('ready', async () => {
+  // Load .env from project root (cwd and app path so dev and packaged both work)
+  require('dotenv').config({ path: path.resolve(process.cwd(), '.env') });
+  require('dotenv').config({ path: path.join(app.getAppPath(), '.env') });
+
   session.defaultSession.webRequest.onBeforeSendHeaders(
     { urls: ['*://cdn.discordapp.com/*', '*://media.discordapp.net/*'] },
     (details, callback) => {
@@ -68,6 +73,7 @@ app.on('ready', async () => {
 
     if (result === 'success') {
       registerDiscordEvents();
+      voiceManager.setNoiseGateDb(settingsManager.settings.noiseGateDb);
       windowManager.closeLoginWindow();
       const homeWindow = windowManager.createHomeWindow();
       homeWindow.webContents.once('did-finish-load', () => {

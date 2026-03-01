@@ -5,6 +5,7 @@ import './ImageLightbox.css';
 
 interface ImageLightboxProps {
   imageUrl: string;
+  isVideo?: boolean;
   onClose: () => void;
 }
 
@@ -18,7 +19,7 @@ function isOpenableInBrowser(url: string): boolean {
   }
 }
 
-export const ImageLightbox: React.FC<ImageLightboxProps> = ({ imageUrl, onClose }) => {
+export const ImageLightbox: React.FC<ImageLightboxProps> = ({ imageUrl, isVideo, onClose }) => {
   const handleBackdropClick = useCallback(
     (e: React.MouseEvent) => {
       if (e.target === e.currentTarget) onClose();
@@ -57,7 +58,20 @@ export const ImageLightbox: React.FC<ImageLightboxProps> = ({ imageUrl, onClose 
           <img src={assetUrl('images', 'imagepreviewer', closeIcon)} alt="" width={28} height={17} draggable={false} />
         </button>
         <div className="image-lightbox-content">
-          <img src={imageUrl} alt="" className="image-lightbox-img" draggable={false} onClick={(e) => e.stopPropagation()} />
+          {isVideo ? (
+            <video
+              src={imageUrl}
+              className="image-lightbox-img"
+              autoPlay
+              loop
+              muted
+              playsInline
+              controls
+              onClick={(e) => e.stopPropagation()}
+            />
+          ) : (
+            <img src={imageUrl} alt="" className="image-lightbox-img" draggable={false} onClick={(e) => e.stopPropagation()} />
+          )}
         </div>
         <div className="image-lightbox-bar">
           {canOpenInBrowser && (

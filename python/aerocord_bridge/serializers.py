@@ -15,8 +15,10 @@ if TYPE_CHECKING:
 
 UNICODE_TO_SHORTCODE: dict[str, str] = {
     "\U0001f600": ":grin:",
+    "\U0001f601": ":grin:",
     "\U0001f603": ":smile:",
     "\U0001f604": ":smile:",
+    "\U0001f606": ":smile:",
     "\U0001f609": ":wink:",
     "\U0001f61c": ":wink:",
     "\U0001f61b": ":stuck_out_tongue:",
@@ -47,6 +49,10 @@ UNICODE_TO_SHORTCODE: dict[str, str] = {
     "\U0001f91d": ":raised_hand:",
     "\u2764": ":heart:",
     "\U0001f494": ":broken_heart:",
+    "\U0001f49e": ":heart:",
+    "\U0001f495": ":heart:",
+    "\U0001f497": ":heart:",
+    "\U0001f496": ":heart:",
     "\U0001f339": ":rose:",
     "\u2b50": ":star:",
     "\u2600": ":sunny:",
@@ -327,6 +333,13 @@ def embed_to_vm(embed: discord.Embed) -> dict:
         if embed.image.height:
             img["height"] = embed.image.height
         vm["image"] = img
+    if embed.video:
+        vid: dict[str, Any] = {"url": str(embed.video.url)}
+        if getattr(embed.video, "width", None) is not None:
+            vid["width"] = embed.video.width
+        if getattr(embed.video, "height", None) is not None:
+            vid["height"] = embed.video.height
+        vm["video"] = vid
     if embed.footer:
         foot: dict[str, Any] = {"text": embed.footer.text or ""}
         if embed.footer.icon_url:

@@ -34,8 +34,8 @@ const api = {
     get: (channelId: string) => ipcRenderer.invoke(IPC.MESSAGES_GET, channelId),
     getBefore: (channelId: string, beforeId: string, limit?: number) =>
       ipcRenderer.invoke(IPC.MESSAGES_GET_BEFORE, channelId, beforeId, limit),
-    send: (channelId: string, content: string, attachmentPaths?: string[]) =>
-      ipcRenderer.invoke(IPC.MESSAGES_SEND, channelId, content, attachmentPaths),
+    send: (channelId: string, content: string, attachmentPaths?: string[], attachmentUrls?: string[]) =>
+      ipcRenderer.invoke(IPC.MESSAGES_SEND, channelId, content, attachmentPaths, attachmentUrls),
     edit: (channelId: string, messageId: string, content: string) =>
       ipcRenderer.invoke(IPC.MESSAGES_EDIT, channelId, messageId, content),
     delete: (channelId: string, messageId: string) =>
@@ -83,6 +83,13 @@ const api = {
   assets: {
     getPath: () => ipcRenderer.invoke(IPC.ASSETS_GET_PATH),
     listGifs: () => ipcRenderer.invoke(IPC.ASSETS_LIST_GIFS) as Promise<string[]>,
+  },
+  gifs: {
+    hasKeys: () => ipcRenderer.invoke(IPC.GIFS_HAS_KEYS) as Promise<boolean>,
+    fetchTrending: (limit?: number) =>
+      ipcRenderer.invoke(IPC.GIFS_FETCH_TRENDING, limit) as Promise<{ id: string; url: string; fullUrl?: string }[]>,
+    search: (q: string, limit?: number) =>
+      ipcRenderer.invoke(IPC.GIFS_SEARCH, q, limit) as Promise<{ id: string; url: string; fullUrl?: string }[]>,
   },
   dialog: {
     pickFiles: (options: { type: 'images' | 'files'; maxSizeBytes?: number }) =>

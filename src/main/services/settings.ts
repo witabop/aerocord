@@ -39,7 +39,10 @@ export interface Settings {
   inputDeviceIndex: number;
   audioInputDeviceId: string;
   audioOutputDeviceId: string;
+  noiseGateDb: number;
   favoriteChannelIds: string[];
+  /** GIF URLs, "local:gifs/filename", or { link, displayUrl } for embed GIFs. */
+  favoriteGifUrls: Array<string | { link: string; displayUrl: string }>;
 }
 
 const DEFAULTS: Settings = {
@@ -79,7 +82,9 @@ const DEFAULTS: Settings = {
   inputDeviceIndex: 0,
   audioInputDeviceId: 'default',
   audioOutputDeviceId: 'default',
+  noiseGateDb: -40,
   favoriteChannelIds: [],
+  favoriteGifUrls: [],
 };
 
 class SettingsManager {

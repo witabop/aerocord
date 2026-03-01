@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import { IPC } from '../main/ipc/channels';
 
 const api = {
@@ -102,6 +102,7 @@ const api = {
       ipcRenderer.invoke(IPC.FILES_WRITE_TEMP, base64, extension) as Promise<string>,
     getPreviewDataUrl: (filePath: string) =>
       ipcRenderer.invoke(IPC.FILES_GET_PREVIEW_DATA_URL, filePath) as Promise<string | null>,
+    getPathForFile: (file: File) => webUtils.getPathForFile(file),
   },
   shell: {
     openExternal: (url: string) => ipcRenderer.invoke(IPC.SHELL_OPEN_EXTERNAL, url) as Promise<void>,

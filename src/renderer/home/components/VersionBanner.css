@@ -33,10 +33,6 @@
   border-radius: 2px;
 }
 
-.version-banner-close:hover {
-  color: blue
-}
-
 .version-banner-close img {
   width: 14px;
   height: 14px;

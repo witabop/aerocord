@@ -292,6 +292,7 @@ export interface AerocordAPI {
   files: {
     writeTemp(base64: string, extension: string): Promise<string>;
     getPreviewDataUrl(filePath: string): Promise<string | null>;
+    getPathForFile(file: File): string;
   };
   shell: {
     openExternal(url: string): Promise<void>;

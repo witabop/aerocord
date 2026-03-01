@@ -925,6 +925,15 @@ export const ChatApp: React.FC = () => {
 
   const MAX_FILE_SIZE_BYTES = 8 * 1024 * 1024;
 
+  const showUploadSizeError = useCallback(() => {
+    setUploadError('Files must be 8MB or smaller.');
+    if (uploadErrorTimerRef.current) clearTimeout(uploadErrorTimerRef.current);
+    uploadErrorTimerRef.current = setTimeout(() => {
+      setUploadError(null);
+      uploadErrorTimerRef.current = null;
+    }, 5000);
+  }, []);
+
   const handleAddAttachments = useCallback((filePaths: string[]) => {
     if (!filePaths.length) return;
     setPendingAttachments((prev) => [
@@ -945,6 +954,39 @@ export const ChatApp: React.FC = () => {
     setPendingAttachments([]);
   }, []);
 
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+  }, []);
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!handleAddAttachments) return;
+      const items = e.dataTransfer?.files;
+      if (!items?.length) return;
+      const maxBytes = MAX_FILE_SIZE_BYTES;
+      const paths: string[] = [];
+      let hasOversized = false;
+      for (let i = 0; i < items.length; i++) {
+        const file = items[i];
+        const path =
+          (file as File & { path?: string }).path ??
+          window.aerocord.files?.getPathForFile?.(file) ??
+          '';
+        if (path) {
+          if (file.size > maxBytes) hasOversized = true;
+          else paths.push(path);
+        }
+      }
+      if (hasOversized) showUploadSizeError();
+      if (paths.length) handleAddAttachments(paths);
+    },
+    [handleAddAttachments, showUploadSizeError]
+  );
+
   const handlePickPhotos = useCallback(async () => {
     if (!channelId || !channel?.canTalk) return;
     const result = await window.aerocord.dialog.pickFiles({
@@ -952,16 +994,11 @@ export const ChatApp: React.FC = () => {
       maxSizeBytes: MAX_FILE_SIZE_BYTES,
     });
     if (!result.ok) {
-      setUploadError('Files must be 8MB or smaller.');
-      if (uploadErrorTimerRef.current) clearTimeout(uploadErrorTimerRef.current);
-      uploadErrorTimerRef.current = setTimeout(() => {
-        setUploadError(null);
-        uploadErrorTimerRef.current = null;
-      }, 5000);
+      showUploadSizeError();
       return;
     }
     if (result.filePaths.length) handleAddAttachments(result.filePaths);
-  }, [channelId, channel?.canTalk, handleAddAttachments]);
+  }, [channelId, channel?.canTalk, handleAddAttachments, showUploadSizeError]);
 
   const handlePickFiles = useCallback(async () => {
     if (!channelId || !channel?.canTalk) return;
@@ -970,16 +1007,11 @@ export const ChatApp: React.FC = () => {
       maxSizeBytes: MAX_FILE_SIZE_BYTES,
     });
     if (!result.ok) {
-      setUploadError('Files must be 8MB or smaller.');
-      if (uploadErrorTimerRef.current) clearTimeout(uploadErrorTimerRef.current);
-      uploadErrorTimerRef.current = setTimeout(() => {
-        setUploadError(null);
-        uploadErrorTimerRef.current = null;
-      }, 5000);
+      showUploadSizeError();
       return;
     }
     if (result.filePaths.length) handleAddAttachments(result.filePaths);
-  }, [channelId, channel?.canTalk, handleAddAttachments]);
+  }, [channelId, channel?.canTalk, handleAddAttachments, showUploadSizeError]);
 
   const handleTyping = useCallback(() => {
     if (channelId) window.aerocord.messages.triggerTyping(channelId);
@@ -1208,7 +1240,11 @@ export const ChatApp: React.FC = () => {
         </>
       ) : null}
 
-      <div className={`chat-messages-area ${isDmChat ? `chat-messages-area-dm${dmCallState !== 'idle' ? ' in-call' : ''}` : ''}`}>
+      <div
+        className={`chat-messages-area ${isDmChat ? `chat-messages-area-dm${dmCallState !== 'idle' ? ' in-call' : ''}` : ''}`}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
+      >
         {isServerChat && sidebarChannels.length > 0 && (
           <div className="chat-sidebar-wrapper">
             <ChannelSidebar

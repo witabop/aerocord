@@ -81,14 +81,18 @@ function removeFavoriteEntry(list: FavoriteGifEntry[], id: string): FavoriteGifE
   );
 }
 
+/** If message content is exactly a single URL, return it; otherwise null. */
+function getSingleUrlFromContent(msg: MessageVM): string | null {
+  const trimmed = msg.content?.trim();
+  if (!trimmed) return null;
+  const m = trimmed.match(/^(https?:\/\/\S+)$/);
+  return m?.[1] ?? null;
+}
+
 /** True when message content is only a single link that matches a media embed or is a direct GIF URL (hide link, show only embed). */
 function contentIsOnlyEmbedLink(msg: MessageVM): boolean {
-  if (!msg.content?.trim()) return false;
-  const trimmed = msg.content.trim();
-  const singleUrlMatch = trimmed.match(/^(https?:\/\/\S+)$/);
-  if (!singleUrlMatch) return false;
-  const url = singleUrlMatch[1];
-  /* Direct GIF URLs (e.g. static.klipy.com/.../xxx.gif): always hide link and show only embed */
+  const url = getSingleUrlFromContent(msg);
+  if (!url) return false;
   if (isDirectGifUrl(url)) return true;
   if (msg.embeds.length === 0) return false;
   const hasMediaEmbed = msg.embeds.some((e) => e.image || e.video);
@@ -103,10 +107,8 @@ function contentIsOnlyEmbedLink(msg: MessageVM): boolean {
 
 /** If message content is only a direct GIF URL and no embed shows it, return that URL to render as a synthetic embed. */
 function getSyntheticGifEmbedUrl(msg: MessageVM): string | null {
-  if (!msg.content?.trim() || !isDirectGifUrl(msg.content.trim())) return null;
-  const m = msg.content.trim().match(/^(https?:\/\/\S+)$/);
-  const url = m?.[1];
-  if (!url) return null;
+  const url = getSingleUrlFromContent(msg);
+  if (!url || !isDirectGifUrl(url)) return null;
   const alreadyShown = msg.embeds.some(
     (e) => e.image?.url === url || e.url === url || (e.video?.url === url)
   );

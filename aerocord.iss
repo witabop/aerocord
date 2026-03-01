@@ -4,7 +4,7 @@
 ; The packaged app must exist at: out\aerocord-win32-x64\
 
 #define MyAppName "Aerocord"
-#define MyAppVersion "3"
+#define MyAppVersion "0.3"
 #define MyAppPublisher "witabop"
 #define MyAppURL "https://github.com/witabop/aerocord"
 #define MyAppExeName "aerocord.exe"

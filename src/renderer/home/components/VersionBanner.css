@@ -4,7 +4,7 @@
   justify-content: space-between;
   gap: 8px;
   padding: 6px 10px;
-  background: linear-gradient(to bottom, #f5e6a8, #e6c84a 50%, #c9a227 50%, #e8d45c);
+  background: linear-gradient(to bottom, #f5e6a8, #e6c84a 45%, #c9a227 55%, #e8d45c);
   outline: solid thin rgba(0, 0, 0, 0.25);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.5), 0 0 12px rgba(160, 120, 0, 0.35);
   border-bottom: 1px solid #b8921f;
@@ -34,7 +34,7 @@
 }
 
 .version-banner-close:hover {
-  background: rgba(0, 0, 0, 0.1);
+  color: blue
 }
 
 .version-banner-close img {

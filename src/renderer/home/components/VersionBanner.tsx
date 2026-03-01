@@ -20,11 +20,15 @@ function isLessThan(a: string, b: string): boolean {
   return pa < pb;
 }
 
+const closeIconUrl = assetUrl('images', 'notification', 'Close.png');
+const closeIconHoverUrl = assetUrl('images', 'notification', 'CloseHover.png');
+
 export const VersionBanner: React.FC = () => {
   const [visible, setVisible] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [currentVersion, setCurrentVersion] = useState('');
   const [latestVersion, setLatestVersion] = useState('');
+  const [closeHover, setCloseHover] = useState(false);
 
   const checkVersion = useCallback(async () => {
     try {
@@ -49,20 +53,22 @@ export const VersionBanner: React.FC = () => {
     checkVersion();
   }, [checkVersion]);
 
-  // if (!visible || dismissed) return null;
+  if (!visible || dismissed) return null;
 
   return (
     <div className="version-banner">
       <span className="version-banner-text">
-        A new version ({latestVersion || 'latest'}) is available. You're on {currentVersion}.
+        <span style={{color: "green", fontWeight: "bold"}}>NOTICE: </span>A new version <span style={{color: "green", fontWeight: "bold"}}>({latestVersion || 'latest'})</span> is available. You're on <span style={{color: "red", fontWeight: "bold"}}>{currentVersion}</span>.
       </span>
       <button
         type="button"
         className="version-banner-close"
         onClick={() => setDismissed(true)}
+        onMouseEnter={() => setCloseHover(true)}
+        onMouseLeave={() => setCloseHover(false)}
         aria-label="Dismiss"
       >
-        <img src={assetUrl('images', 'notification', 'Close.png')} alt="" draggable={false} />
+        <img src={closeHover ? closeIconHoverUrl : closeIconUrl} alt="" draggable={false} />
       </button>
     </div>
   );

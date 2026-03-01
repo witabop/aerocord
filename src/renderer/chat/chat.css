@@ -544,6 +544,12 @@
   color: #3584e4;
 }
 
+.chat-message-edited {
+  font-size: 11px;
+  color: #6a7a8a;
+  font-style: italic;
+}
+
 .chat-message-emoji {
   display: inline-block;
   width: 18px;

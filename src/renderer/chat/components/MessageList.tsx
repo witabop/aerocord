@@ -447,7 +447,10 @@ export const MessageList: React.FC<MessageListProps> = ({
               </div>
             ) : (
               msg.content && !contentIsOnlyEmbedLink(msg) && (
-                <div className="chat-message-content">{renderMessageContent(msg.content, onUserClick, msg.mentions, msg.mentionRoles)}</div>
+                <div className="chat-message-content">
+                  {renderMessageContent(msg.content, onUserClick, msg.mentions, msg.mentionRoles)}
+                  {msg.edited && <span className="chat-message-edited"> (edited)</span>}
+                </div>
               )
             )}
 
@@ -623,6 +626,10 @@ export const MessageList: React.FC<MessageListProps> = ({
                 </div>
               );
             })}
+
+            {msg.edited && (!msg.content || contentIsOnlyEmbedLink(msg)) && (
+              <span className="chat-message-edited"> (edited)</span>
+            )}
           </div>
         );
       })}

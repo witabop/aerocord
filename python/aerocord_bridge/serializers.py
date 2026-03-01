@@ -479,6 +479,7 @@ def message_to_vm(client: discord.Client, msg: discord.Message, self_id: Optiona
         "mentions": mentions,
         "mentionRoles": mention_roles,
         "mentionsSelf": mentions_self,
+        "edited": msg.edited_at is not None,
     }
     if reply_message:
         vm["replyMessage"] = reply_message
@@ -507,6 +508,7 @@ def _message_fallback(client: discord.Client, msg: discord.Message) -> dict:
         "mentions": [],
         "mentionRoles": [],
         "mentionsSelf": False,
+        "edited": getattr(msg, "edited_at", None) is not None,
     }
 
 

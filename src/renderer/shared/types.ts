@@ -44,6 +44,8 @@ export interface MessageVM {
   notifyEntryId?: string;
   /** True if a chat window for this entry is already open (don't show notification icon). */
   notifyEntryOpen?: boolean;
+  /** True if the message was edited after sending. */
+  edited?: boolean;
 }
 
 export interface AttachmentVM {

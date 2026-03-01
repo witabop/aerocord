@@ -1038,7 +1038,13 @@ export const ChatApp: React.FC = () => {
   }, []);
 
   const handleDeleteMessage = useCallback(async (messageId: string) => {
-    if (channelId) await window.aerocord.messages.delete(channelId, messageId);
+    if (!channelId) return;
+    setMessages(prev => prev.filter(m => m.id !== messageId));
+    try {
+      await window.aerocord.messages.delete(channelId, messageId);
+    } catch {
+      // Delete failed; message was already removed optimistically. User can switch channel and back to refetch.
+    }
   }, [channelId]);
 
   const handleEditMessage = useCallback(async (messageId: string, content: string) => {

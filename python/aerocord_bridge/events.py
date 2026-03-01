@@ -79,6 +79,8 @@ def register_events(client: discord.Client, get_self_id: Any) -> None:
         name = global_name or username or "Unknown"
         avatar = _avatar_url(user_obj, 64)
 
+        is_friend = getattr(user_obj, "is_friend", lambda: False)()
+
         await send_event("presenceUpdate", {
             "userId": user_id,
             "presence": presence,
@@ -89,6 +91,7 @@ def register_events(client: discord.Client, get_self_id: Any) -> None:
             "avatar": avatar,
             "globalName": global_name or name,
             "globalAvatar": avatar,
+            "isFriend": is_friend,
         })
 
     @client.event

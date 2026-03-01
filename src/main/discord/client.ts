@@ -227,6 +227,14 @@ class DiscordClientWrapper {
     }
   }
 
+  async searchMembers(channelId: string, query: string, limit = 8): Promise<UserVM[]> {
+    try {
+      return await pythonBridge.request<UserVM[]>('searchMembers', { channelId, query, limit });
+    } catch {
+      return [];
+    }
+  }
+
   async sendFriendRequest(username: string): Promise<{ success: boolean; error?: string }> {
     try {
       return await pythonBridge.request<{ success: boolean; error?: string }>('sendFriendRequest', { username });

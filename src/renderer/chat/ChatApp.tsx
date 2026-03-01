@@ -591,6 +591,11 @@ export const ChatApp: React.FC = () => {
     }
   });
 
+  useIPCEvent('event:sceneChange', (data: unknown) => {
+    const newScene = data as SceneVM;
+    setScene(newScene);
+  });
+
   useIPCEvent('event:messageDelete', (data: unknown) => {
     const { id, channelId: deletedChannelId } = data as { id: string; channelId: string };
     if (deletedChannelId !== channelId) return;
@@ -1327,6 +1332,7 @@ export const ChatApp: React.FC = () => {
             onCancelReply={() => setReplyTarget(null)}
             disabled={channel ? !channel.canTalk : true}
             members={members}
+            channelId={channelId}
           />
 
           {messages.length > 0 && (

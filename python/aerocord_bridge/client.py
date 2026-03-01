@@ -803,6 +803,24 @@ class DiscordBridgeClient:
             print(f"[bridge] get_channel_members error: {e}", file=sys.stderr)
             return []
 
+    async def search_members(self, channelId: str, query: str, limit: int = 8) -> list[dict]:
+        """Search guild members by name/username using gateway query_members."""
+        if not self._client or not query:
+            return []
+        try:
+            channel = await self._resolve_channel(channelId)
+            if not channel or not isinstance(channel, discord.TextChannel):
+                return []
+            guild = channel.guild
+            results = await asyncio.wait_for(
+                guild.query_members(query=query, limit=limit, presences=False, cache=True),
+                timeout=5,
+            )
+            return [member_to_vm(self._client, m) for m in results]
+        except Exception as e:
+            print(f"[bridge] search_members error: {e}", file=sys.stderr)
+            return []
+
     async def send_friend_request(self, username: str) -> dict:
         if not self._client:
             return {"success": False, "error": "Not connected"}
@@ -944,42 +962,43 @@ class DiscordBridgeClient:
                 return entry
 
         try:
-            user = None
+            # fetch_user hits the HTTP API and returns accent_color, banner, etc.
+            # Cached members/users from the gateway do NOT include these fields.
+            fetched = await self._client.fetch_user(uid)
+
+            # Use guild member for display_name (server nickname) when available
+            member = None
             for g in self._client.guilds:
-                user = g.get_member(uid)
-                if user:
+                member = g.get_member(uid)
+                if member:
                     break
-            if not user:
-                user = self._client.get_user(uid)
-            if not user:
-                user = await self._client.fetch_user(uid)
+            display_name = (member.display_name if member else None) or fetched.display_name or fetched.name
 
             profile = None
             try:
-                profile = await user.profile()
+                profile = await fetched.profile()
             except Exception:
                 pass
 
             bio = getattr(profile, "bio", "") or "" if profile else ""
-            accent = getattr(user, "accent_color", None) or getattr(user, "accent_colour", None)
-            accent_color = None
-            if accent:
-                accent_color = f"#{accent:06x}" if isinstance(accent, int) else str(accent)
+
+            accent = getattr(fetched, "accent_color", None) or getattr(fetched, "accent_colour", None)
+            accent_color = f"#{accent:06x}" if isinstance(accent, int) else str(accent) if accent else None
 
             banner_url = None
-            if user.banner:
-                banner_url = str(user.banner.with_size(512).url)
+            if fetched.banner:
+                banner_url = str(fetched.banner.with_size(512).url)
 
             result = {
-                "id": str(user.id),
-                "name": user.display_name or user.name,
-                "username": user.name,
-                "avatar": _avatar_url(user, 128),
+                "id": str(fetched.id),
+                "name": display_name,
+                "username": fetched.name,
+                "avatar": _avatar_url(fetched, 128),
                 "bio": bio,
                 "accentColor": accent_color,
                 "bannerUrl": banner_url,
                 "presence": resolve_user_presence(self._client, uid),
-                "createdAt": user.created_at.isoformat() if user.created_at else "",
+                "createdAt": fetched.created_at.isoformat() if fetched.created_at else "",
             }
             self._profile_cache[uid] = (result, now)
             return result

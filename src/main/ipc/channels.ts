@@ -35,6 +35,7 @@ export const IPC = {
   CHANNELS_GET: 'channels:get',
   CHANNELS_GET_GUILD_CHANNELS: 'channels:getGuildChannels',
   CHANNELS_GET_MEMBERS: 'channels:getMembers',
+  CHANNELS_SEARCH_MEMBERS: 'channels:searchMembers',
   CHANNELS_GET_OR_CREATE_DM: 'channels:getOrCreateDM',
   CHANNELS_CLOSE_CONVERSATION: 'channels:closeConversation',
 
@@ -103,6 +104,7 @@ export const IPC = {
   WINDOW_CLOSE: 'window:close',
 
   // Events (main -> renderer)
+  EVENT_SCENE_CHANGE: 'event:sceneChange',
   EVENT_READY: 'event:ready',
   EVENT_MESSAGE_CREATE: 'event:messageCreate',
   EVENT_MESSAGE_DELETE: 'event:messageDelete',

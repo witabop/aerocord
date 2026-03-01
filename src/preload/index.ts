@@ -48,6 +48,8 @@ const api = {
     getGuildChannels: (guildId: string) => ipcRenderer.invoke(IPC.CHANNELS_GET_GUILD_CHANNELS, guildId),
     getMembers: (channelId: string, limit?: number, offset?: number) =>
       ipcRenderer.invoke(IPC.CHANNELS_GET_MEMBERS, channelId, limit, offset),
+    searchMembers: (channelId: string, query: string, limit?: number) =>
+      ipcRenderer.invoke(IPC.CHANNELS_SEARCH_MEMBERS, channelId, query, limit),
     getOrCreateDM: (userId: string) => ipcRenderer.invoke(IPC.CHANNELS_GET_OR_CREATE_DM, userId) as Promise<string>,
     closeConversation: (channelId: string) => ipcRenderer.invoke(IPC.CHANNELS_CLOSE_CONVERSATION, channelId) as Promise<{ success: boolean; error?: string }>,
   },

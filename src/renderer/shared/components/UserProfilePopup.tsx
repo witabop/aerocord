@@ -47,7 +47,9 @@ export const UserProfilePopup: React.FC<UserProfilePopupProps> = ({ userId, posi
   const clampedX = Math.min(position.x, window.innerWidth - 280);
   const clampedY = Math.min(position.y, window.innerHeight - 340);
 
-  const accentColor = profile?.accentColor || '#5865F2';
+  const profileAccentStyle: React.CSSProperties = profile?.accentColor
+    ? { '--profile-accent': profile.accentColor } as React.CSSProperties
+    : {};
 
   return (
     <div className="profile-popup-overlay" onClick={handleOverlayClick}>
@@ -56,8 +58,8 @@ export const UserProfilePopup: React.FC<UserProfilePopupProps> = ({ userId, posi
         style={{
           left: clampedX,
           top: clampedY,
-          '--profile-accent': accentColor,
-        } as React.CSSProperties}
+          ...profileAccentStyle,
+        }}
         onClick={e => e.stopPropagation()}
       >
         {loading ? (

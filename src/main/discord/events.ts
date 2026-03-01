@@ -103,7 +103,7 @@ export function registerDiscordEvents(): void {
     const wasOffline = data.oldStatus === 'offline' || !data.oldStatus;
     const isNowOnline = data.newStatus && data.newStatus !== 'offline';
 
-    if (wasOffline && isNowOnline && settingsManager.settings.notifyFriendOnline && userId) {
+    if (wasOffline && isNowOnline && data.isFriend && settingsManager.settings.notifyFriendOnline && userId) {
       if (signOnNotifiedUserIds.has(userId)) return;
       signOnNotifiedUserIds.add(userId);
       windowManager.openNotificationWindow({

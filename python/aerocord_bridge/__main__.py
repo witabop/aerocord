@@ -165,9 +165,13 @@ def build_router() -> JsonRpcRouter:
     async def handle_close_conversation(channelId: str) -> dict:
         return await bridge_client.close_conversation(channelId)
 
+    async def handle_search_members(channelId: str, query: str, limit: int = 8) -> list:
+        return await bridge_client.search_members(channelId, query, limit)
+
     router.register("getChannel", handle_get_channel)
     router.register("getGuildChannels", handle_get_guild_channels)
     router.register("getChannelMembers", handle_get_channel_members)
+    router.register("searchMembers", handle_search_members)
     router.register("getOrCreateDM", handle_get_or_create_dm)
     router.register("closeConversation", handle_close_conversation)
 

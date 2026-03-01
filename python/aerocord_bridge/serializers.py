@@ -349,14 +349,21 @@ def embed_to_vm(embed: discord.Embed) -> dict:
 
 
 def _resolve_mentions_in_content(content: str, message: discord.Message, client: discord.Client) -> str:
+    # msg.mentions contains resolved users sent by Discord in the message payload,
+    # so we always have names even for users not in the local guild/member cache.
+    mention_lookup: dict[int, str] = {}
+    for u in message.mentions:
+        mention_lookup[u.id] = getattr(u, "display_name", None) or getattr(u, "name", "unknown")
+
     def replace_user_mention(match: re.Match) -> str:
         uid = int(match.group(1))
-        user = message.guild.get_member(uid) if message.guild else client.get_user(uid)
-        if user is None:
-            user = client.get_user(uid)
+        if uid in mention_lookup:
+            return f"@{mention_lookup[uid]}"
+        member = message.guild.get_member(uid) if message.guild else None
+        user = member or client.get_user(uid)
         if user:
             return f"@{getattr(user, 'display_name', None) or getattr(user, 'name', 'unknown')}"
-        return "@unknown"
+        return f"@{uid}"
 
     def replace_role_mention(match: re.Match) -> str:
         rid = int(match.group(1))

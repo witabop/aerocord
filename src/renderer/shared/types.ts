@@ -247,6 +247,7 @@ export interface AerocordAPI {
     get(channelId: string): Promise<ChannelVM | null>;
     getGuildChannels(guildId: string): Promise<ChannelVM[]>;
     getMembers(channelId: string, limit?: number, offset?: number): Promise<UserVM[]>;
+    searchMembers(channelId: string, query: string, limit?: number): Promise<UserVM[]>;
     getOrCreateDM(userId: string): Promise<string>;
     closeConversation(channelId: string): Promise<{ success: boolean; error?: string }>;
   };

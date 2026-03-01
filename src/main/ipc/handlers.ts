@@ -8,6 +8,7 @@ import { registerDiscordEvents, markRecentlyUnfriended } from '../discord/events
 import { voiceManager } from '../discord/voice';
 import { settingsManager } from '../services/settings';
 import { themeService } from '../services/theme';
+import { saveUserConfig, loadUserConfig } from '../services/userConfig';
 import { fetchTrendingGifs, searchGifs, hasApiKeys } from '../services/klipy';
 import { windowManager } from '../windows/manager';
 
@@ -207,6 +208,10 @@ export function registerIPCHandlers(): void {
     return discordClient.getChannelMembers(channelId, limit, offset);
   });
 
+  ipcMain.handle(IPC.CHANNELS_SEARCH_MEMBERS, async (_e, channelId: string, query: string, limit?: number) => {
+    return discordClient.searchMembers(channelId, query, limit);
+  });
+
   ipcMain.handle(IPC.CHANNELS_GET_OR_CREATE_DM, async (_e, userId: string) => {
     return discordClient.getOrCreateDMChannel(userId);
   });
@@ -308,6 +313,22 @@ export function registerIPCHandlers(): void {
 
   ipcMain.handle(IPC.THEME_SET_SCENE, async (_e, sceneId: number) => {
     themeService.setScene(sceneId);
+    const newScene = themeService.currentScene;
+    // Broadcast to ALL windows so chat/notification windows update live
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) {
+        win.webContents.send(IPC.EVENT_SCENE_CHANGE, newScene);
+      }
+    }
+    // Persist immediately so scene survives crashes / force-close
+    discordClient.getCurrentUser().then(user => {
+      if (user) {
+        saveUserConfig(user.id, {
+          settings: settingsManager.getPublicSettings(),
+          sceneId,
+        });
+      }
+    }).catch(() => {});
   });
 
   ipcMain.handle(IPC.THEME_GET_CURRENT, async () => {

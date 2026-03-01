@@ -75,6 +75,7 @@ export interface MessageInputProps {
   onCancelReply: () => void;
   disabled: boolean;
   members?: UserVM[];
+  channelId?: string;
 }
 
 interface MentionSuggestion {
@@ -98,6 +99,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   onCancelReply,
   disabled,
   members,
+  channelId,
 }) => {
   const [text, setText] = useState('');
   const [suggestions, setSuggestions] = useState<MentionSuggestion[]>([]);
@@ -107,6 +109,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   const [gifBoardOpen, setGifBoardOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lastTypingRef = useRef(0);
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const allMembers = useMemo(() => {
     if (!members) return [];
@@ -124,12 +127,14 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     if (atIndex === -1 || (atIndex > 0 && beforeCursor[atIndex - 1] !== ' ' && beforeCursor[atIndex - 1] !== '\n')) {
       setMentionQuery(null);
       setSuggestions([]);
+      if (searchTimerRef.current) { clearTimeout(searchTimerRef.current); searchTimerRef.current = null; }
       return;
     }
     const query = beforeCursor.substring(atIndex + 1);
     if (query.includes(' ') && query.length > 20) {
       setMentionQuery(null);
       setSuggestions([]);
+      if (searchTimerRef.current) { clearTimeout(searchTimerRef.current); searchTimerRef.current = null; }
       return;
     }
     setMentionQuery({ start: atIndex, query });
@@ -139,7 +144,23 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     ).slice(0, 8);
     setSuggestions(filtered);
     setSelectedSuggestion(0);
-  }, [allMembers]);
+
+    // If no local results and we have a guild channel, search the server after a short debounce
+    if (filtered.length === 0 && query.length >= 1 && channelId) {
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+      searchTimerRef.current = setTimeout(() => {
+        window.aerocord.channels.searchMembers(channelId, query, 8).then((results) => {
+          if (results.length > 0) {
+            setSuggestions(results.map(m => ({ id: m.id, name: m.name, username: m.username, avatar: m.avatar })));
+            setSelectedSuggestion(0);
+          }
+        }).catch(() => {});
+      }, 300);
+    } else if (searchTimerRef.current) {
+      clearTimeout(searchTimerRef.current);
+      searchTimerRef.current = null;
+    }
+  }, [allMembers, channelId]);
 
   const insertMention = useCallback((user: MentionSuggestion) => {
     if (!mentionQuery || !textareaRef.current) return;

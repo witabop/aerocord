@@ -168,6 +168,10 @@ export const HomeApp: React.FC = () => {
     window.aerocord.contacts.getFriends().then(friends => setFriendIds(new Set(friends)));
   });
 
+  useIPCEvent('event:sceneChange', (data: unknown) => {
+    setScene(data as SceneVM);
+  });
+
   useIPCEvent('play-sound', (name: unknown) => {
     if (typeof name === 'string') playSound(name);
   });

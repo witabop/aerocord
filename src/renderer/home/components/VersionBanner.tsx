@@ -58,7 +58,7 @@ export const VersionBanner: React.FC = () => {
   return (
     <div className="version-banner">
       <span className="version-banner-text">
-        <span style={{color: "green", fontWeight: "bold"}}>NOTICE: </span>A new version <span style={{color: "green", fontWeight: "bold"}}>({latestVersion || 'latest'})</span> is available. You're on <span style={{color: "red", fontWeight: "bold"}}>{currentVersion}</span>.
+        <span style={{color: "green", fontWeight: "bold"}}>NOTICE: </span>A new version <a href="https://github.com/witabop/aerocord/releases" style={{color: "green", fontWeight: "bold", textDecoration: "underline"}}>({latestVersion || 'latest'})</a> is available. You're on <span style={{color: "red", fontWeight: "bold"}}>{currentVersion}</span>.
       </span>
       <button
         type="button"

@@ -29,6 +29,15 @@ def register_events(client: discord.Client, get_self_id: Any) -> None:
         self_id = get_self_id()
         vm = message_to_vm(client, msg, self_id)
 
+        msg_type_str = str(msg.type).split(".")[-1].lower() if msg.type else "default"
+        if msg_type_str in ("pins_add", "channel_pinned_message") and hasattr(msg.channel, "pins"):
+            try:
+                pins = await msg.channel.pins()
+                if pins:
+                    vm["pinnedMessageId"] = str(pins[0].id)
+            except Exception:
+                pass
+
         is_dm = isinstance(msg.channel, (discord.DMChannel, discord.GroupChannel))
         vm["isDirectMessage"] = is_dm
 
@@ -58,6 +67,17 @@ def register_events(client: discord.Client, get_self_id: Any) -> None:
         })
 
     @client.event
+    async def on_raw_message_delete(payload: Any) -> None:
+        # Fires for every delete (including when message was not in cache, e.g. pin notification).
+        message_id = getattr(payload, "message_id", None) or getattr(payload, "id", None)
+        channel_id = getattr(payload, "channel_id", None)
+        if message_id is not None and channel_id is not None:
+            await send_event("messageDelete", {
+                "id": str(message_id),
+                "channelId": str(channel_id),
+            })
+
+    @client.event
     async def on_message_edit(before: discord.Message, after: discord.Message) -> None:
         self_id = get_self_id()
         vm = message_to_vm(client, after, self_id)
@@ -79,7 +99,10 @@ def register_events(client: discord.Client, get_self_id: Any) -> None:
         name = global_name or username or "Unknown"
         avatar = _avatar_url(user_obj, 64)
 
-        is_friend = getattr(user_obj, "is_friend", lambda: False)()
+        try:
+            is_friend = after.id in {r.id for r in client.friends}
+        except Exception:
+            is_friend = False
 
         await send_event("presenceUpdate", {
             "userId": user_id,

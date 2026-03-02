@@ -135,6 +135,15 @@ def build_router() -> JsonRpcRouter:
     async def handle_delete_message(channelId: str, messageId: str) -> bool:
         return await bridge_client.delete_message(channelId, messageId)
 
+    async def handle_get_pinned_messages(channelId: str) -> list:
+        return await bridge_client.get_pinned_messages(channelId)
+
+    async def handle_pin_message(channelId: str, messageId: str) -> dict:
+        return await bridge_client.pin_message(channelId, messageId)
+
+    async def handle_unpin_message(channelId: str, messageId: str) -> dict:
+        return await bridge_client.unpin_message(channelId, messageId)
+
     async def handle_trigger_typing(channelId: str) -> None:
         await bridge_client.trigger_typing(channelId)
 
@@ -146,6 +155,9 @@ def build_router() -> JsonRpcRouter:
     router.register("sendMessage", handle_send_message)
     router.register("editMessage", handle_edit_message)
     router.register("deleteMessage", handle_delete_message)
+    router.register("getPinnedMessages", handle_get_pinned_messages)
+    router.register("pinMessage", handle_pin_message)
+    router.register("unpinMessage", handle_unpin_message)
     router.register("triggerTyping", handle_trigger_typing)
     router.register("ackMessage", handle_ack_message)
 

@@ -40,6 +40,11 @@ const api = {
       ipcRenderer.invoke(IPC.MESSAGES_EDIT, channelId, messageId, content),
     delete: (channelId: string, messageId: string) =>
       ipcRenderer.invoke(IPC.MESSAGES_DELETE, channelId, messageId),
+    getPinned: (channelId: string) => ipcRenderer.invoke(IPC.MESSAGES_GET_PINNED, channelId),
+    pin: (channelId: string, messageId: string) =>
+      ipcRenderer.invoke(IPC.MESSAGES_PIN, channelId, messageId),
+    unpin: (channelId: string, messageId: string) =>
+      ipcRenderer.invoke(IPC.MESSAGES_UNPIN, channelId, messageId),
     triggerTyping: (channelId: string) => ipcRenderer.invoke(IPC.MESSAGES_TRIGGER_TYPING, channelId),
     ack: (channelId: string, messageId: string) => ipcRenderer.invoke(IPC.MESSAGES_ACK, channelId, messageId),
   },

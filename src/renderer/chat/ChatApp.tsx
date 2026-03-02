@@ -8,6 +8,7 @@ import { VoiceControls } from './components/VoiceControls';
 import { StatusAvatar } from '../shared/components/StatusAvatar';
 import { UserProfilePopup } from '../shared/components/UserProfilePopup';
 import { DmCallOverlay } from './components/DmCallOverlay';
+import { PinsPopup } from './components/PinsPopup';
 import { assetUrl } from '../shared/hooks/useAssets';
 import { playSound, playSoundLoop, stopSoundLoop } from '../shared/utils/sounds';
 import { computeTextColors } from '../shared/utils/colors';
@@ -47,6 +48,8 @@ export const ChatApp: React.FC = () => {
   const [dmCallState, setDmCallState] = useState<DmCallState>('idle');
   const [dmCallChannelId, setDmCallChannelId] = useState<string | null>(null);
   const [profilePopup, setProfilePopup] = useState<{ userId: string; x: number; y: number } | null>(null);
+  const [pinsPopupOpen, setPinsPopupOpen] = useState(false);
+  const [pinnedMessageIds, setPinnedMessageIds] = useState<Set<string>>(new Set());
   const [showMemberList, setShowMemberList] = useState(true);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
@@ -159,8 +162,11 @@ export const ChatApp: React.FC = () => {
     messagesRef.current = messages;
   }, [messages]);
 
+  const PIN_JUMP_MAX_LOADS = 12;
+
   const handleScrollToMessage = useCallback(
-    async (messageId: string) => {
+    async (messageId: string, options?: { maxLoads?: number }): Promise<boolean> => {
+      const maxLoads = options?.maxLoads ?? 30;
       const scrollToEl = () => {
         const container = messagesScrollRef.current;
         const el = container?.querySelector<HTMLElement>(`[data-message-id="${messageId}"]`);
@@ -174,21 +180,32 @@ export const ChatApp: React.FC = () => {
 
       if (messagesRef.current.some((m) => m.id === messageId)) {
         scrollToEl();
-        return;
+        return true;
       }
 
-      for (let i = 0; i < 30 && hasMoreMessages && !isLoadingMoreMessages; i++) {
+      for (let i = 0; i < maxLoads && hasMoreMessages && !isLoadingMoreMessages; i++) {
         await loadMoreMessages();
         await new Promise((r) => setTimeout(r, 120));
         if (messagesRef.current.some((m) => m.id === messageId)) {
           requestAnimationFrame(() => scrollToEl());
-          return;
+          return true;
         }
       }
+      if (maxLoads < 30) return false;
       requestAnimationFrame(() => scrollToEl());
+      return true;
     },
     [loadMoreMessages, hasMoreMessages, isLoadingMoreMessages]
   );
+
+  const handleJumpToMessageFromPins = useCallback(
+    (messageId: string) => handleScrollToMessage(messageId, { maxLoads: PIN_JUMP_MAX_LOADS }),
+    [handleScrollToMessage]
+  );
+
+  const handlePinsLoaded = useCallback((list: MessageVM[]) => {
+    setPinnedMessageIds(new Set(list.map((m) => m.id)));
+  }, []);
 
   // When opened from a notification, the hash may not be available on first paint. Re-read until we have a channelId.
   useEffect(() => {
@@ -210,6 +227,18 @@ export const ChatApp: React.FC = () => {
   useEffect(() => {
     if (channelId) loadChannel(channelId);
   }, [channelId, loadChannel]);
+
+  useEffect(() => {
+    if (!channelId) {
+      setPinnedMessageIds(new Set());
+      return;
+    }
+    let cancelled = false;
+    window.aerocord.messages.getPinned(channelId).then((list) => {
+      if (!cancelled) setPinnedMessageIds(new Set(list.map((m) => m.id)));
+    }).catch(() => { if (!cancelled) setPinnedMessageIds(new Set()); });
+    return () => { cancelled = true; };
+  }, [channelId]);
 
   useEffect(() => {
     if (channel?.guildId && channelId) {
@@ -1119,6 +1148,34 @@ export const ChatApp: React.FC = () => {
     setReplyTarget(msg);
   }, []);
 
+  const handlePinMessage = useCallback(async (messageId: string) => {
+    if (!channelId) return;
+    try {
+      const result = await window.aerocord.messages.pin(channelId, messageId);
+      if (result?.success !== false) {
+        setPinnedMessageIds(prev => new Set([...prev, messageId]));
+      }
+    } catch {
+      // Pin failed; leave pinnedMessageIds unchanged
+    }
+  }, [channelId]);
+
+  const handleUnpinMessage = useCallback(async (messageId: string) => {
+    if (!channelId) return;
+    try {
+      const result = await window.aerocord.messages.unpin(channelId, messageId);
+      if (result?.success !== false) {
+        setPinnedMessageIds(prev => {
+          const next = new Set(prev);
+          next.delete(messageId);
+          return next;
+        });
+      }
+    } catch {
+      // Unpin failed
+    }
+  }, [channelId]);
+
   const handleJoinVoice = useCallback(async (vcId: string) => {
     if (currentVoiceChannelId === vcId) return;
     await window.aerocord.voice.join(vcId);
@@ -1238,6 +1295,15 @@ export const ChatApp: React.FC = () => {
             <div className="chat-header-info no-drag">
               <div className="chat-header-name">{isServerChat ? (channel?.guildName || displayName) : displayName}</div>
             </div>
+            <button
+              type="button"
+              className="chat-header-pin-btn no-drag"
+              onClick={() => setPinsPopupOpen(true)}
+              title="Pinned messages"
+              aria-label="Pinned messages"
+            >
+              <img src={assetUrl('images', 'message', 'pin.ico')} alt="" draggable={false} />
+            </button>
           </div>
         </>
       ) : (
@@ -1270,6 +1336,15 @@ export const ChatApp: React.FC = () => {
                 </>
               )}
             </div>
+            <button
+              type="button"
+              className="chat-header-pin-btn no-drag"
+              onClick={() => setPinsPopupOpen(true)}
+              title="Pinned messages"
+              aria-label="Pinned messages"
+            >
+              <img src={assetUrl('images', 'message', 'pin.ico')} alt="" draggable={false} />
+            </button>
           </div>
         </>
       )}
@@ -1364,6 +1439,11 @@ export const ChatApp: React.FC = () => {
             hasMoreMessages={hasMoreMessages}
             onScrollToMessage={handleScrollToMessage}
             highlightMessageId={highlightMessageId}
+            canPin={channel ? (!!channel.canManageMessages || !channel.guildId) : false}
+            pinnedMessageIds={pinnedMessageIds}
+            onPin={handlePinMessage}
+            onUnpin={handleUnpinMessage}
+            onOpenPins={() => setPinsPopupOpen(true)}
           />
 
           <div className="chat-typing">
@@ -1435,6 +1515,16 @@ export const ChatApp: React.FC = () => {
           userId={profilePopup.userId}
           position={{ x: profilePopup.x, y: profilePopup.y }}
           onClose={() => setProfilePopup(null)}
+        />
+      )}
+
+      {channelId && (
+        <PinsPopup
+          channelId={channelId}
+          isOpen={pinsPopupOpen}
+          onClose={() => setPinsPopupOpen(false)}
+          onJumpToMessage={handleJumpToMessageFromPins}
+          onPinsLoaded={handlePinsLoaded}
         />
       )}
     </div>

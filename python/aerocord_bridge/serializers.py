@@ -417,6 +417,7 @@ def message_to_vm(client: discord.Client, msg: discord.Message, self_id: Optiona
         "recipient_remove": f"{author['name']} has been removed from the group.",
         "call": f"{author['name']} has started a call.",
         "pins_add": f"{author['name']} pinned a message to this channel.",
+        "channel_pinned_message": f"{author['name']} pinned a message to this channel.",
         "channel_name_change": f"{author['name']} has changed the group name to {msg.content}.",
     }
 
@@ -465,6 +466,7 @@ def message_to_vm(client: discord.Client, msg: discord.Message, self_id: Optiona
         "channel_name_change": "CHANNEL_NAME_CHANGE",
         "channel_icon_change": "CHANNEL_ICON_CHANGE",
         "pins_add": "CHANNEL_PINNED_MESSAGE",
+        "channel_pinned_message": "CHANNEL_PINNED_MESSAGE",
         "guild_member_join": "GUILD_MEMBER_JOIN",
         "reply": "REPLY",
     }
@@ -535,6 +537,7 @@ def channel_to_vm(client: discord.Client, channel: Any) -> dict:
         recipient = channel.recipient
         base["name"] = (getattr(recipient, "display_name", None) or getattr(recipient, "name", "DM")) if recipient else "DM"
         base["recipients"] = [user_to_vm(client, recipient)] if recipient else []
+        base["canManageMessages"] = True  # Both participants can pin in DMs
         if recipient:
             try:
                 accent = getattr(recipient, "accent_color", None) or getattr(recipient, "accent_colour", None)
@@ -548,6 +551,7 @@ def channel_to_vm(client: discord.Client, channel: Any) -> dict:
         ) or "Group"
         base["isGroupChat"] = True
         base["recipients"] = [user_to_vm(client, r) for r in recipients]
+        base["canManageMessages"] = True  # All members can pin in group DMs
     elif isinstance(channel, discord.TextChannel):
         base["name"] = channel.name
         base["topic"] = channel.topic or ""
@@ -555,12 +559,20 @@ def channel_to_vm(client: discord.Client, channel: Any) -> dict:
         base["guildName"] = channel.guild.name
         base["position"] = channel.position
         base["parentId"] = str(channel.category_id) if channel.category_id else None
-        me = channel.guild.me
-        if me:
-            perms = channel.permissions_for(me)
-            base["canTalk"] = perms.send_messages
-            base["canManageMessages"] = perms.manage_messages
-            base["canAttachFiles"] = perms.attach_files
+        me = getattr(channel.guild, "me", None)
+        if me is None and getattr(client, "user", None) is not None:
+            me = channel.guild.get_member(client.user.id)
+        if me is not None:
+            try:
+                perms = channel.permissions_for(me)
+                base["canTalk"] = bool(perms.send_messages)
+                can_pin = bool(perms.manage_messages) or bool(getattr(perms, "pin_messages", False)) or bool(perms.administrator)
+                base["canManageMessages"] = can_pin
+                base["canAttachFiles"] = bool(perms.attach_files)
+            except Exception:
+                base["canManageMessages"] = True
+        else:
+            base["canManageMessages"] = True
     elif isinstance(channel, discord.VoiceChannel) or isinstance(channel, discord.StageChannel):
         base["name"] = channel.name
         base["channelType"] = "voice"
@@ -576,6 +588,14 @@ def channel_to_vm(client: discord.Client, channel: Any) -> dict:
         base["guildName"] = channel.guild.name
         base["position"] = channel.position
         base["canTalk"] = False
+    else:
+        # Catch-all for Thread, ForumChannel, or any other guild-like channel type
+        guild = getattr(channel, "guild", None)
+        base["name"] = getattr(channel, "name", "") or ""
+        if guild:
+            base["guildId"] = str(guild.id)
+            base["guildName"] = guild.name
+            base["canManageMessages"] = True
 
     return base
 

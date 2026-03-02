@@ -184,6 +184,30 @@ class DiscordClientWrapper {
     }
   }
 
+  async getPinnedMessages(channelId: string): Promise<MessageVM[]> {
+    try {
+      return await pythonBridge.request<MessageVM[]>('getPinnedMessages', { channelId });
+    } catch {
+      return [];
+    }
+  }
+
+  async pinMessage(channelId: string, messageId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      return await pythonBridge.request<{ success: boolean; error?: string }>('pinMessage', { channelId, messageId });
+    } catch (e: any) {
+      return { success: false, error: e?.message || 'Failed to pin message' };
+    }
+  }
+
+  async unpinMessage(channelId: string, messageId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      return await pythonBridge.request<{ success: boolean; error?: string }>('unpinMessage', { channelId, messageId });
+    } catch (e: any) {
+      return { success: false, error: e?.message || 'Failed to unpin message' };
+    }
+  }
+
   async triggerTyping(channelId: string): Promise<void> {
     try {
       await pythonBridge.request('triggerTyping', { channelId });

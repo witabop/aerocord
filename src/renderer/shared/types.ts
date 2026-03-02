@@ -46,6 +46,8 @@ export interface MessageVM {
   notifyEntryOpen?: boolean;
   /** True if the message was edited after sending. */
   edited?: boolean;
+  /** For CHANNEL_PINNED_MESSAGE: id of the message that was pinned (for jump-to). */
+  pinnedMessageId?: string;
 }
 
 export interface AttachmentVM {
@@ -240,6 +242,9 @@ export interface AerocordAPI {
     send(channelId: string, content: string, attachmentPaths?: string[], attachmentUrls?: string[], replyToMessageId?: string): Promise<{ success: boolean; error?: string }>;
     edit(channelId: string, messageId: string, content: string): Promise<boolean>;
     delete(channelId: string, messageId: string): Promise<boolean>;
+    getPinned(channelId: string): Promise<MessageVM[]>;
+    pin(channelId: string, messageId: string): Promise<{ success: boolean; error?: string }>;
+    unpin(channelId: string, messageId: string): Promise<{ success: boolean; error?: string }>;
     triggerTyping(channelId: string): Promise<void>;
     ack(channelId: string, messageId: string): Promise<void>;
   };

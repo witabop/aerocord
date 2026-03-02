@@ -21,6 +21,11 @@ interface MessageListProps {
   hasMoreMessages?: boolean;
   onScrollToMessage?: (messageId: string) => void;
   highlightMessageId?: string | null;
+  canPin?: boolean;
+  pinnedMessageIds?: Set<string>;
+  onPin?: (messageId: string) => void;
+  onUnpin?: (messageId: string) => void;
+  onOpenPins?: () => void;
 }
 
 function formatTime(isoStr: string): string {
@@ -264,6 +269,11 @@ export const MessageList: React.FC<MessageListProps> = ({
   hasMoreMessages,
   onScrollToMessage,
   highlightMessageId,
+  canPin,
+  pinnedMessageIds = new Set(),
+  onPin,
+  onUnpin,
+  onOpenPins,
 }) => {
   const [ctxMenu, setCtxMenu] = useState<ContextMenu | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -423,6 +433,14 @@ export const MessageList: React.FC<MessageListProps> = ({
     if (ctxMenu) { onDelete(ctxMenu.msg.id); setCtxMenu(null); }
   }, [ctxMenu, onDelete]);
 
+  const handlePinCtx = useCallback(() => {
+    if (ctxMenu && onPin) { onPin(ctxMenu.msg.id); setCtxMenu(null); }
+  }, [ctxMenu, onPin]);
+
+  const handleUnpinCtx = useCallback(() => {
+    if (ctxMenu && onUnpin) { onUnpin(ctxMenu.msg.id); setCtxMenu(null); }
+  }, [ctxMenu, onUnpin]);
+
   const setScrollRef = useCallback(
     (el: HTMLDivElement | null) => {
       (internalScrollRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
@@ -441,6 +459,40 @@ export const MessageList: React.FC<MessageListProps> = ({
         const isOwn = msg.author.id === currentUserId;
 
         if (msg.special) {
+          if (msg.type === 'CHANNEL_PINNED_MESSAGE') {
+            return (
+              <div key={msg.id} className="chat-message">
+                <div className="chat-message-special chat-message-pin">
+                  <span className="chat-message-pin-author">{msg.author.name}</span>
+                  {' pinned '}
+                  {msg.pinnedMessageId && onScrollToMessage ? (
+                    <button
+                      type="button"
+                      className="chat-message-pin-link"
+                      onClick={() => onScrollToMessage(msg.pinnedMessageId!)}
+                    >
+                      a message
+                    </button>
+                  ) : (
+                    'a message'
+                  )}
+                  {' to this channel. See all '}
+                  {onOpenPins ? (
+                    <button
+                      type="button"
+                      className="chat-message-pin-link"
+                      onClick={onOpenPins}
+                    >
+                      pinned messages
+                    </button>
+                  ) : (
+                    'pinned messages'
+                  )}
+                  .
+                </div>
+              </div>
+            );
+          }
           return (
             <div key={msg.id} className="chat-message">
               <div className="chat-message-special">{msg.content}</div>
@@ -448,11 +500,16 @@ export const MessageList: React.FC<MessageListProps> = ({
           );
         }
 
+        const replyClasses = msg.isReply && msg.replyMessage
+          ? msg.replyMessage.author.id === currentUserId
+            ? 'chat-message-is-reply chat-message-reply-to-client'
+            : 'chat-message-is-reply'
+          : '';
         return (
           <div
             key={msg.id}
             data-message-id={msg.id}
-            className={`chat-message ${msg.mentionsSelf ? 'chat-message-mention' : ''} ${highlightMessageId === msg.id ? 'chat-message-highlight' : ''}`}
+            className={`chat-message ${replyClasses} ${msg.mentionsSelf ? 'chat-message-mention' : ''} ${highlightMessageId === msg.id ? 'chat-message-highlight' : ''}`}
             onContextMenu={(e) => handleContextMenu(e, msg, isOwn)}
             onMouseEnter={(e) => handleShiftHover(e, msg, isOwn)}
             onMouseLeave={handleMessageMouseLeave}
@@ -473,11 +530,13 @@ export const MessageList: React.FC<MessageListProps> = ({
                   draggable={false}
                 />
                 <span className="chat-message-reply-author">{msg.replyMessage.author.name}: </span>
-                {msg.replyMessage.content.trim()
-                  ? (msg.replyMessage.content.length > 100
-                    ? `${msg.replyMessage.content.substring(0, 100)}...`
-                    : msg.replyMessage.content)
-                  : (msg.replyMessage.attachments?.length ? <i>attachment</i> : '')}
+                <span className="chat-message-reply-content">
+                  {msg.replyMessage.content.trim()
+                    ? (msg.replyMessage.content.length > 100
+                      ? `${msg.replyMessage.content.substring(0, 100)}...`
+                      : msg.replyMessage.content)
+                    : (msg.replyMessage.attachments?.length ? 'attachment' : '')}
+                </span>
               </div>
             )}
 
@@ -707,6 +766,12 @@ export const MessageList: React.FC<MessageListProps> = ({
           onClick={(e) => e.stopPropagation()}
         >
           <button className="msg-ctx-item" onClick={handleReply}>Reply</button>
+          {canPin && !pinnedMessageIds.has(ctxMenu.msg.id) && (
+            <button className="msg-ctx-item" onClick={handlePinCtx}>Pin</button>
+          )}
+          {canPin && pinnedMessageIds.has(ctxMenu.msg.id) && (
+            <button className="msg-ctx-item" onClick={handleUnpinCtx}>Unpin</button>
+          )}
           {ctxMenu.isOwn && (
             <>
               <button className="msg-ctx-item" onClick={handleStartEdit}>Edit</button>

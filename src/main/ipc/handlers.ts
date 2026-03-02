@@ -195,6 +195,18 @@ export function registerIPCHandlers(): void {
     return discordClient.deleteMessage(channelId, messageId);
   });
 
+  ipcMain.handle(IPC.MESSAGES_GET_PINNED, async (_e, channelId: string) => {
+    return discordClient.getPinnedMessages(channelId);
+  });
+
+  ipcMain.handle(IPC.MESSAGES_PIN, async (_e, channelId: string, messageId: string) => {
+    return discordClient.pinMessage(channelId, messageId);
+  });
+
+  ipcMain.handle(IPC.MESSAGES_UNPIN, async (_e, channelId: string, messageId: string) => {
+    return discordClient.unpinMessage(channelId, messageId);
+  });
+
   ipcMain.handle(IPC.MESSAGES_TRIGGER_TYPING, async (_e, channelId: string) => {
     await discordClient.triggerTyping(channelId);
   });

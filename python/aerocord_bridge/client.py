@@ -647,6 +647,60 @@ class DiscordBridgeClient:
             print(f"[bridge] delete_message error: {e}", file=sys.stderr)
             return False
 
+    async def get_pinned_messages(self, channelId: str) -> list[dict]:
+        if not self._client:
+            return []
+        try:
+            channel = await self._resolve_channel(channelId)
+            if not hasattr(channel, "pins"):
+                return []
+            pins: list[discord.Message] = await channel.pins()
+            guild = getattr(channel, "guild", None)
+            if guild:
+                await self._prefetch_message_authors(guild, pins)
+            self_id = self._client.user.id if self._client.user else None
+            return [message_to_vm(self._client, m, self_id) for m in pins]
+        except discord.Forbidden:
+            print(f"[bridge] get_pinned_messages: no access to channel {channelId}", file=sys.stderr)
+            return []
+        except Exception as e:
+            print(f"[bridge] get_pinned_messages error: {e}", file=sys.stderr)
+            return []
+
+    async def pin_message(self, channelId: str, messageId: str) -> dict:
+        if not self._client:
+            return {"success": False, "error": "Not connected"}
+        try:
+            channel = await self._resolve_channel(channelId)
+            if not hasattr(channel, "fetch_message"):
+                return {"success": False, "error": "Cannot pin in this channel"}
+            msg = await channel.fetch_message(int(messageId))
+            await msg.pin()
+            return {"success": True}
+        except discord.Forbidden:
+            return {"success": False, "error": "You don't have permission to pin messages here"}
+        except Exception as e:
+            msg = str(e)
+            print(f"[bridge] pin_message error: {msg}", file=sys.stderr)
+            return {"success": False, "error": msg or "Failed to pin message"}
+
+    async def unpin_message(self, channelId: str, messageId: str) -> dict:
+        if not self._client:
+            return {"success": False, "error": "Not connected"}
+        try:
+            channel = await self._resolve_channel(channelId)
+            if not hasattr(channel, "fetch_message"):
+                return {"success": False, "error": "Cannot unpin in this channel"}
+            msg = await channel.fetch_message(int(messageId))
+            await msg.unpin()
+            return {"success": True}
+        except discord.Forbidden:
+            return {"success": False, "error": "You don't have permission to unpin messages here"}
+        except Exception as e:
+            msg = str(e)
+            print(f"[bridge] unpin_message error: {msg}", file=sys.stderr)
+            return {"success": False, "error": msg or "Failed to unpin message"}
+
     async def trigger_typing(self, channelId: str) -> None:
         if not self._client:
             return

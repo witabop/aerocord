@@ -28,6 +28,9 @@ export const IPC = {
   MESSAGES_SEND: 'messages:send',
   MESSAGES_EDIT: 'messages:edit',
   MESSAGES_DELETE: 'messages:delete',
+  MESSAGES_GET_PINNED: 'messages:getPinned',
+  MESSAGES_PIN: 'messages:pin',
+  MESSAGES_UNPIN: 'messages:unpin',
   MESSAGES_TRIGGER_TYPING: 'messages:triggerTyping',
   MESSAGES_ACK: 'messages:ack',
 

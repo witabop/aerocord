@@ -237,7 +237,7 @@ export interface AerocordAPI {
   messages: {
     get(channelId: string): Promise<MessageVM[]>;
     getBefore(channelId: string, beforeId: string, limit?: number): Promise<MessageVM[]>;
-    send(channelId: string, content: string, attachmentPaths?: string[], attachmentUrls?: string[]): Promise<{ success: boolean; error?: string }>;
+    send(channelId: string, content: string, attachmentPaths?: string[], attachmentUrls?: string[], replyToMessageId?: string): Promise<{ success: boolean; error?: string }>;
     edit(channelId: string, messageId: string, content: string): Promise<boolean>;
     delete(channelId: string, messageId: string): Promise<boolean>;
     triggerTyping(channelId: string): Promise<void>;

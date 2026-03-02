@@ -34,8 +34,8 @@ const api = {
     get: (channelId: string) => ipcRenderer.invoke(IPC.MESSAGES_GET, channelId),
     getBefore: (channelId: string, beforeId: string, limit?: number) =>
       ipcRenderer.invoke(IPC.MESSAGES_GET_BEFORE, channelId, beforeId, limit),
-    send: (channelId: string, content: string, attachmentPaths?: string[], attachmentUrls?: string[]) =>
-      ipcRenderer.invoke(IPC.MESSAGES_SEND, channelId, content, attachmentPaths, attachmentUrls),
+    send: (channelId: string, content: string, attachmentPaths?: string[], attachmentUrls?: string[], replyToMessageId?: string) =>
+      ipcRenderer.invoke(IPC.MESSAGES_SEND, channelId, content, attachmentPaths, attachmentUrls, replyToMessageId),
     edit: (channelId: string, messageId: string, content: string) =>
       ipcRenderer.invoke(IPC.MESSAGES_EDIT, channelId, messageId, content),
     delete: (channelId: string, messageId: string) =>

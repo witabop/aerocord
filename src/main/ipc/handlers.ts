@@ -119,6 +119,13 @@ export function registerIPCHandlers(): void {
 
   ipcMain.handle(IPC.CONTACTS_SET_FAVORITES, async (_e, ids: string[]) => {
     settingsManager.update({ favoriteChannelIds: ids } as any);
+    const user = await discordClient.getCurrentUser().catch(() => null);
+    if (user) {
+      saveUserConfig(user.id, {
+        settings: settingsManager.getPublicSettings(),
+        sceneId: themeService.currentScene?.id ?? 1,
+      });
+    }
   });
 
   // ---- Messages ----
@@ -137,7 +144,8 @@ export function registerIPCHandlers(): void {
       channelId: string,
       content: string,
       attachmentPaths?: string[],
-      attachmentUrls?: string[]
+      attachmentUrls?: string[],
+      replyToMessageId?: string
     ) => {
       const assetsPath = await getAssetsPath();
       const paths: string[] = [];
@@ -166,7 +174,7 @@ export function registerIPCHandlers(): void {
         }
       }
       try {
-        return await discordClient.sendMessage(channelId, content, paths.length ? paths : undefined);
+        return await discordClient.sendMessage(channelId, content, paths.length ? paths : undefined, replyToMessageId);
       } finally {
         for (const tmp of tempFiles) {
           try {

@@ -19,6 +19,8 @@ interface MessageListProps {
   onLoadMoreMessages?: () => void;
   isLoadingMore?: boolean;
   hasMoreMessages?: boolean;
+  onScrollToMessage?: (messageId: string) => void;
+  highlightMessageId?: string | null;
 }
 
 function formatTime(isoStr: string): string {
@@ -244,6 +246,8 @@ interface ContextMenu {
   y: number;
   msg: MessageVM;
   isOwn: boolean;
+  /** true when opened by holding Shift over message; close on Shift release */
+  openedByShift?: boolean;
 }
 
 export const MessageList: React.FC<MessageListProps> = ({
@@ -258,6 +262,8 @@ export const MessageList: React.FC<MessageListProps> = ({
   onLoadMoreMessages,
   isLoadingMore,
   hasMoreMessages,
+  onScrollToMessage,
+  highlightMessageId,
 }) => {
   const [ctxMenu, setCtxMenu] = useState<ContextMenu | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -307,6 +313,8 @@ export const MessageList: React.FC<MessageListProps> = ({
   const editRef = useRef<HTMLTextAreaElement>(null);
   const internalScrollRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = forwardedScrollRef ?? internalScrollRef;
+  const hoveredMessageRef = useRef<{ msg: MessageVM; isOwn: boolean } | null>(null);
+  const lastMouseRef = useRef({ x: 0, y: 0 });
 
   useEffect(() => {
     if (editingId && editRef.current) editRef.current.focus();
@@ -340,8 +348,46 @@ export const MessageList: React.FC<MessageListProps> = ({
 
   const handleContextMenu = useCallback((e: React.MouseEvent, msg: MessageVM, isOwn: boolean) => {
     e.preventDefault();
-    setCtxMenu({ x: e.clientX, y: e.clientY, msg, isOwn });
+    setCtxMenu({ x: e.clientX, y: e.clientY, msg, isOwn, openedByShift: false });
   }, []);
+
+  const handleShiftHover = useCallback((e: React.MouseEvent, msg: MessageVM, isOwn: boolean) => {
+    hoveredMessageRef.current = { msg, isOwn };
+    lastMouseRef.current = { x: e.clientX, y: e.clientY };
+    if (e.shiftKey) {
+      setCtxMenu({ x: e.clientX, y: e.clientY, msg, isOwn, openedByShift: true });
+    }
+  }, []);
+
+  const handleMessageMouseLeave = useCallback(() => {
+    hoveredMessageRef.current = null;
+  }, []);
+
+  const handleMessagesMouseMove = useCallback((e: React.MouseEvent) => {
+    lastMouseRef.current = { x: e.clientX, y: e.clientY };
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Shift' && hoveredMessageRef.current) {
+        const { msg, isOwn } = hoveredMessageRef.current;
+        const { x, y } = lastMouseRef.current;
+        setCtxMenu({ x, y, msg, isOwn, openedByShift: true });
+      }
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Shift' && ctxMenu?.openedByShift) {
+        setCtxMenu(null);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+    };
+  }, [ctxMenu]);
+
 
   const handleReply = useCallback(() => {
     if (ctxMenu) { onReply(ctxMenu.msg); setCtxMenu(null); }
@@ -386,7 +432,7 @@ export const MessageList: React.FC<MessageListProps> = ({
   );
 
   return (
-    <div className="chat-messages" ref={setScrollRef}>
+    <div className="chat-messages" ref={setScrollRef} onMouseMove={handleMessagesMouseMove}>
       {isLoadingMore && (
         <div className="chat-messages-loading">Loading older messages...</div>
       )}
@@ -405,14 +451,33 @@ export const MessageList: React.FC<MessageListProps> = ({
         return (
           <div
             key={msg.id}
-            className={`chat-message ${msg.mentionsSelf ? 'chat-message-mention' : ''}`}
+            data-message-id={msg.id}
+            className={`chat-message ${msg.mentionsSelf ? 'chat-message-mention' : ''} ${highlightMessageId === msg.id ? 'chat-message-highlight' : ''}`}
             onContextMenu={(e) => handleContextMenu(e, msg, isOwn)}
+            onMouseEnter={(e) => handleShiftHover(e, msg, isOwn)}
+            onMouseLeave={handleMessageMouseLeave}
           >
             {msg.isReply && msg.replyMessage && (
-              <div className="chat-message-reply">
+              <div
+                className="chat-message-reply chat-message-reply-clickable"
+                role="button"
+                tabIndex={0}
+                onClick={() => onScrollToMessage?.(msg.replyMessage!.id)}
+                onKeyDown={(e) => e.key === 'Enter' && onScrollToMessage?.(msg.replyMessage!.id)}
+                title="Jump to message"
+              >
+                <img
+                  className="chat-message-reply-icon"
+                  src={assetUrl('images', 'message', msg.replyMessage.author.id === currentUserId ? 'replyclient.png' : 'reply.png')}
+                  alt=""
+                  draggable={false}
+                />
                 <span className="chat-message-reply-author">{msg.replyMessage.author.name}: </span>
-                {msg.replyMessage.content.substring(0, 100)}
-                {msg.replyMessage.content.length > 100 ? '...' : ''}
+                {msg.replyMessage.content.trim()
+                  ? (msg.replyMessage.content.length > 100
+                    ? `${msg.replyMessage.content.substring(0, 100)}...`
+                    : msg.replyMessage.content)
+                  : (msg.replyMessage.attachments?.length ? <i>attachment</i> : '')}
               </div>
             )}
 

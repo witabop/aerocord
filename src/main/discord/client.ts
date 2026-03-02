@@ -155,12 +155,13 @@ class DiscordClientWrapper {
     }
   }
 
-  async sendMessage(channelId: string, content: string, attachmentPaths?: string[]): Promise<{ success: boolean; error?: string }> {
+  async sendMessage(channelId: string, content: string, attachmentPaths?: string[], replyToMessageId?: string): Promise<{ success: boolean; error?: string }> {
     try {
       return await pythonBridge.request<{ success: boolean; error?: string }>('sendMessage', {
         channelId,
         content,
         attachmentPaths: attachmentPaths || null,
+        replyToMessageId: replyToMessageId ?? null,
       });
     } catch (e: any) {
       return { success: false, error: e?.message || 'Failed to send message' };

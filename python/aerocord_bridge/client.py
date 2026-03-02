@@ -573,7 +573,13 @@ class DiscordBridgeClient:
             print(f"[bridge] get_messages_before error: {e}", file=sys.stderr)
             return []
 
-    async def send_message(self, channelId: str, content: str, attachmentPaths: Optional[list[str]] = None) -> dict:
+    async def send_message(
+        self,
+        channelId: str,
+        content: str,
+        attachmentPaths: Optional[list[str]] = None,
+        reply_to_message_id: Optional[str] = None,
+    ) -> dict:
         if not self._client:
             return {"success": False, "error": "Not connected"}
         try:
@@ -590,7 +596,21 @@ class DiscordBridgeClient:
                 for fp in attachmentPaths:
                     files.append(discord.File(fp))
 
-            await channel.send(content=send_content, files=files if files else discord.utils.MISSING)
+            reference = None
+            if reply_to_message_id:
+                ref_kw: dict = {
+                    "message_id": int(reply_to_message_id),
+                    "channel_id": int(channelId),
+                }
+                if getattr(channel, "guild", None):
+                    ref_kw["guild_id"] = channel.guild.id
+                reference = discord.MessageReference(**ref_kw)
+
+            await channel.send(
+                content=send_content,
+                files=files if files else discord.utils.MISSING,
+                reference=reference,
+            )
             return {"success": True}
         except Exception as e:
             msg = str(e)

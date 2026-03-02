@@ -56,6 +56,8 @@ export const ChatApp: React.FC = () => {
   const typingTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesScrollRef = useRef<HTMLDivElement>(null);
+  const messagesRef = useRef<MessageVM[]>([]);
+  const [highlightMessageId, setHighlightMessageId] = useState<string | null>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const workletNodeRef = useRef<ScriptProcessorNode | null>(null);
@@ -152,6 +154,41 @@ export const ChatApp: React.FC = () => {
     } catch { /* ignore */ }
     setIsLoadingMoreMessages(false);
   }, [channelId, isLoadingMoreMessages, hasMoreMessages, messages]);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  const handleScrollToMessage = useCallback(
+    async (messageId: string) => {
+      const scrollToEl = () => {
+        const container = messagesScrollRef.current;
+        const el = container?.querySelector<HTMLElement>(`[data-message-id="${messageId}"]`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          setHighlightMessageId(messageId);
+          const t = setTimeout(() => setHighlightMessageId(null), 2200);
+          return () => clearTimeout(t);
+        }
+      };
+
+      if (messagesRef.current.some((m) => m.id === messageId)) {
+        scrollToEl();
+        return;
+      }
+
+      for (let i = 0; i < 30 && hasMoreMessages && !isLoadingMoreMessages; i++) {
+        await loadMoreMessages();
+        await new Promise((r) => setTimeout(r, 120));
+        if (messagesRef.current.some((m) => m.id === messageId)) {
+          requestAnimationFrame(() => scrollToEl());
+          return;
+        }
+      }
+      requestAnimationFrame(() => scrollToEl());
+    },
+    [loadMoreMessages, hasMoreMessages, isLoadingMoreMessages]
+  );
 
   // When opened from a notification, the hash may not be available on first paint. Re-read until we have a channelId.
   useEffect(() => {
@@ -894,10 +931,19 @@ export const ChatApp: React.FC = () => {
       const hasAttachments = attachmentPaths && attachmentPaths.length > 0;
       if (!hasText && !hasAttachments) return;
       const sendContent = hasText ? content.trim() : '\u200B';
-      const result = await window.aerocord.messages.send(channelId, sendContent, attachmentPaths);
+      const result = await window.aerocord.messages.send(channelId, sendContent, attachmentPaths, undefined, replyTarget?.id);
       if (result.success) {
         if (hasAttachments) setPendingAttachments([]);
         setReplyTarget(null);
+        const scrollToBottom = () => {
+          const target = messagesScrollRef.current ?? document.querySelector('.chat-messages');
+          if (target) {
+            (target as HTMLElement).scrollTop = (target as HTMLElement).scrollHeight;
+            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+          }
+        };
+        requestAnimationFrame(scrollToBottom);
+        setTimeout(scrollToBottom, 200);
       } else {
         setSendError(result.error || 'Failed to send message');
         sendErrorTimerRef.current = setTimeout(() => {
@@ -906,7 +952,7 @@ export const ChatApp: React.FC = () => {
         }, 8000);
       }
     },
-    [channelId]
+    [channelId, replyTarget?.id]
   );
 
   const handleSendGif = useCallback(
@@ -916,16 +962,25 @@ export const ChatApp: React.FC = () => {
       const isUrl = id.startsWith('http://') || id.startsWith('https://');
       // For links (e.g. Tenor/Giphy), send the link as message content so it embeds; don't send as attachment.
       const result = isUrl
-        ? await window.aerocord.messages.send(channelId, id)
-        : await window.aerocord.messages.send(channelId, '', [id]);
+        ? await window.aerocord.messages.send(channelId, id, undefined, undefined, replyTarget?.id)
+        : await window.aerocord.messages.send(channelId, '', [id], undefined, replyTarget?.id);
       if (result.success) {
         setReplyTarget(null);
+        const scrollToBottom = () => {
+          const target = messagesScrollRef.current ?? document.querySelector('.chat-messages');
+          if (target) {
+            (target as HTMLElement).scrollTop = (target as HTMLElement).scrollHeight;
+            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+          }
+        };
+        requestAnimationFrame(scrollToBottom);
+        setTimeout(scrollToBottom, 200);
       } else {
         setSendError(result.error || 'Failed to send');
         sendErrorTimerRef.current = setTimeout(() => setSendError(null), 8000);
       }
     },
-    [channelId]
+    [channelId, replyTarget?.id]
   );
 
   const MAX_FILE_SIZE_BYTES = 8 * 1024 * 1024;
@@ -1167,7 +1222,12 @@ export const ChatApp: React.FC = () => {
           </div>
           <div className="chat-header chat-header-group">
             {sceneBgUrl && (
-              <img className="chat-header-scene-bg" src={sceneBgUrl} alt="" draggable={false} />
+              <img
+                className={`chat-header-scene-bg ${scene?.file && scene.file !== 'default.png' ? 'chat-header-scene-bg-extended' : ''}`}
+                src={sceneBgUrl}
+                alt=""
+                draggable={false}
+              />
             )}
             <img
               className="chat-header-group-icon"
@@ -1302,6 +1362,8 @@ export const ChatApp: React.FC = () => {
             onLoadMoreMessages={loadMoreMessages}
             isLoadingMore={isLoadingMoreMessages}
             hasMoreMessages={hasMoreMessages}
+            onScrollToMessage={handleScrollToMessage}
+            highlightMessageId={highlightMessageId}
           />
 
           <div className="chat-typing">

@@ -126,8 +126,8 @@ def build_router() -> JsonRpcRouter:
     async def handle_get_messages_before(channelId: str, beforeId: str, limit: int = 50) -> list:
         return await bridge_client.get_messages_before(channelId, beforeId, limit)
 
-    async def handle_send_message(channelId: str, content: str, attachmentPaths: list[str] | None = None) -> dict:
-        return await bridge_client.send_message(channelId, content, attachmentPaths)
+    async def handle_send_message(channelId: str, content: str, attachmentPaths: list[str] | None = None, replyToMessageId: str | None = None) -> dict:
+        return await bridge_client.send_message(channelId, content, attachmentPaths, reply_to_message_id=replyToMessageId)
 
     async def handle_edit_message(channelId: str, messageId: str, content: str) -> bool:
         return await bridge_client.edit_message(channelId, messageId, content)

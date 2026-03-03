@@ -126,6 +126,55 @@ export function contentToMarkdownHtml(
   return html;
 }
 
+/** Inline-only markdown + sanitize for embed title/short text (no block tags, no mentions). */
+const INLINE_ALLOWED_TAGS = [
+  'strong', 'b', 'em', 'i', 'u', 's', 'del', 'code', 'a', 'span', 'img',
+];
+const INLINE_ALLOWED_ATTR = ['href', 'target', 'rel', 'class', 'src', 'alt', 'title', 'draggable'];
+
+export function embedTextToMarkdownHtml(
+  content: string,
+  options: Pick<MarkdownOptions, 'getEmojiImageUrl'> = {}
+): string {
+  const { getEmojiImageUrl } = options;
+  let text = content;
+
+  // 1) Replace emoji codes with placeholders
+  const emojiCodes = Object.keys(EMOJI_CODE_TO_FILE);
+  for (const code of emojiCodes) {
+    text = text.replace(new RegExp(escapeRe(code), 'g'), makeEmojiPlaceholder(code));
+  }
+
+  // 2) Inline markdown (no <p>, no block elements)
+  marked.setOptions({ gfm: true, breaks: false });
+  const rawHtml = marked.parseInline(text, { async: false });
+  let html = typeof rawHtml === 'string' ? rawHtml : '';
+
+  // 3) Sanitize inline-only
+  html = DOMPurify.sanitize(html, {
+    ALLOWED_TAGS: INLINE_ALLOWED_TAGS,
+    ALLOWED_ATTR: INLINE_ALLOWED_ATTR,
+    ADD_ATTR: ['target', 'rel'],
+  });
+  html = html.replace(/<a href=/gi, '<a target="_blank" rel="noopener noreferrer" href=');
+
+  // 4) Restore emoji placeholders
+  const emojiPlaceholderRe = new RegExp(
+    `${escapeRe(EMOJI_PREFIX)}([^\uE001]+)${escapeRe(EMOJI_SUFFIX)}`,
+    'g'
+  );
+  html = html.replace(emojiPlaceholderRe, (_, code: string) => {
+    const fullCode = code;
+    const url = getEmojiImageUrl?.(fullCode) ?? '';
+    if (url) {
+      return `<img class="chat-message-emoji" src="${escapeHtml(url)}" alt="${escapeHtml(fullCode)}" title="${escapeHtml(fullCode)}" draggable="false" />`;
+    }
+    return escapeHtml(fullCode);
+  });
+
+  return html;
+}
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, '&amp;')

@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { assetUrl } from '../../shared/hooks/useAssets';
 import { getEmojiFileForCode } from '../../shared/emojiCodes';
-import { contentToMarkdownHtml } from '../../shared/markdown';
+import { contentToMarkdownHtml, embedTextToMarkdownHtml } from '../../shared/markdown';
 import type { MessageVM, FavoriteGifEntry } from '../../shared/types';
 import { isGifUrl, isEmbedGifLink, isDirectGifUrl, EMBED_GIF_HOSTS, getGifUrlHost } from '../../shared/gifUtils';
 import { ImageLightbox } from './ImageLightbox';
@@ -579,11 +579,30 @@ export const MessageList: React.FC<MessageListProps> = ({
                 >
                   {embed.title && (
                     <div className="chat-embed-title">
-                      {embed.url ? <a href={embed.url} target="_blank" rel="noreferrer">{embed.title}</a> : embed.title}
+                      {embed.url ? (
+                        <a href={embed.url} target="_blank" rel="noopener noreferrer" onClick={(e) => { e.preventDefault(); window.aerocord?.shell?.openExternal(embed.url!); }}>
+                          <span
+                            className="chat-embed-title-inner chat-message-content-markdown"
+                            dangerouslySetInnerHTML={{ __html: embedTextToMarkdownHtml(embed.title, { getEmojiImageUrl }) }}
+                          />
+                        </a>
+                      ) : (
+                        <span
+                          className="chat-embed-title-inner chat-message-content-markdown"
+                          dangerouslySetInnerHTML={{ __html: embedTextToMarkdownHtml(embed.title, { getEmojiImageUrl }) }}
+                        />
+                      )}
                     </div>
                   )}
                   {embed.description && (
-                    <div className="chat-embed-description">{embed.description}</div>
+                    <div
+                      className="chat-embed-description chat-message-content-markdown"
+                      onClick={(e) => handleContentClick(e, onUserClick)}
+                      role="textbox"
+                      dangerouslySetInnerHTML={{
+                        __html: contentToMarkdownHtml(embed.description, { getEmojiImageUrl }),
+                      }}
+                    />
                   )}
                   {hasImageOrGifUrl && (
                     isImageGif ? (

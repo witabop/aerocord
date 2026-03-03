@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { assetUrl } from '../../shared/hooks/useAssets';
-import { splitByEmojiCodes, getEmojiFileForCode } from '../../shared/emojiCodes';
+import { getEmojiFileForCode } from '../../shared/emojiCodes';
+import { contentToMarkdownHtml } from '../../shared/markdown';
 import type { MessageVM, FavoriteGifEntry } from '../../shared/types';
 import { isGifUrl, isEmbedGifLink, isDirectGifUrl, EMBED_GIF_HOSTS, getGifUrlHost } from '../../shared/gifUtils';
 import { ImageLightbox } from './ImageLightbox';
@@ -130,122 +131,6 @@ function getEmbedsToShow(msg: MessageVM): MessageVM['embeds'] {
   return [synthetic, ...msg.embeds];
 }
 
-/** Matches http(s) URLs for linkification. */
-const URL_REGEX = /(https?:\/\/[^\s<>"']+)/g;
-
-function splitByUrls(text: string): Array<{ type: 'text' | 'url'; value: string }> {
-  const parts: Array<{ type: 'text' | 'url'; value: string }> = [];
-  let lastIndex = 0;
-  let m: RegExpExecArray | null;
-  URL_REGEX.lastIndex = 0;
-  while ((m = URL_REGEX.exec(text)) !== null) {
-    if (m.index > lastIndex) {
-      parts.push({ type: 'text', value: text.slice(lastIndex, m.index) });
-    }
-    parts.push({ type: 'url', value: m[1] });
-    lastIndex = m.index + m[1].length;
-  }
-  if (lastIndex < text.length) {
-    parts.push({ type: 'text', value: text.slice(lastIndex) });
-  }
-  return parts.length ? parts : [{ type: 'text', value: text }];
-}
-
-function renderContentWithMentions(
-  content: string,
-  onUserClick?: (userId: string, x: number, y: number) => void,
-  mentions?: { id: string; name: string }[],
-  mentionRoles?: { id: string; name: string }[],
-): React.ReactNode {
-  const userMentions = mentions ?? [];
-  const roleMentions = mentionRoles ?? [];
-  const allMentionNames = [
-    ...userMentions.map(m => `@${m.name}`),
-    ...roleMentions.map(r => `@${r.name}`),
-  ];
-  if (allMentionNames.length === 0) return content;
-
-  const userMentionMap = new Map(userMentions.map(m => [`@${m.name}`, m.id]));
-  const roleMentionSet = new Set(roleMentions.map(r => `@${r.name}`));
-
-  const escaped = allMentionNames.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-  const regex = new RegExp(`(${escaped.join('|')})`, 'g');
-
-  const parts = content.split(regex);
-  return parts.map((part, i) => {
-    const userId = userMentionMap.get(part);
-    if (userId) {
-      return (
-        <span
-          key={i}
-          className="chat-mention-badge"
-          onClick={(e) => onUserClick?.(userId, e.clientX, e.clientY)}
-        >
-          {part}
-        </span>
-      );
-    }
-    if (roleMentionSet.has(part)) {
-      return (
-        <span key={i} className="chat-mention-badge">
-          {part}
-        </span>
-      );
-    }
-    return part;
-  });
-}
-
-function renderMessageContent(
-  content: string,
-  onUserClick?: (userId: string, x: number, y: number) => void,
-  mentions?: { id: string; name: string }[],
-  mentionRoles?: { id: string; name: string }[],
-): React.ReactNode {
-  const segments = splitByEmojiCodes(content);
-  return segments.map((seg, i) => {
-    if (seg.type === 'emoji') {
-      const file = getEmojiFileForCode(seg.value);
-      if (file) {
-        return (
-          <img
-            key={i}
-            className="chat-message-emoji"
-            src={assetUrl('images', 'emoji', file)}
-            alt={seg.value}
-            title={seg.value}
-            draggable={false}
-          />
-        );
-      }
-    }
-    const urlParts = splitByUrls(seg.value);
-    return (
-      <React.Fragment key={i}>
-        {urlParts.map((part, j) =>
-          part.type === 'url' ? (
-            <a
-              key={j}
-              href={part.value}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="chat-message-link"
-              onClick={(e) => {
-                e.preventDefault();
-                window.aerocord?.shell?.openExternal(part.value);
-              }}
-            >
-              {part.value}
-            </a>
-          ) : (
-            <React.Fragment key={j}>{renderContentWithMentions(part.value, onUserClick, mentions, mentionRoles)}</React.Fragment>
-          ),
-        )}
-      </React.Fragment>
-    );
-  });
-}
-
 interface ContextMenu {
   x: number;
   y: number;
@@ -320,6 +205,34 @@ export const MessageList: React.FC<MessageListProps> = ({
     setLightboxUrl(null);
     setLightboxIsVideo(false);
   }, []);
+
+  const getEmojiImageUrl = useCallback((code: string) => {
+    const file = getEmojiFileForCode(code);
+    return file ? assetUrl('images', 'emoji', file) : '';
+  }, []);
+
+  const handleContentClick = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>, onUserClick?: (userId: string, x: number, y: number) => void) => {
+      const t = e.target;
+      if (!(t instanceof HTMLElement)) return;
+      const mention = t.closest('.chat-mention-badge[data-user-id]');
+      if (mention) {
+        e.preventDefault();
+        const userId = mention.getAttribute('data-user-id');
+        if (userId) onUserClick?.(userId, e.clientX, e.clientY);
+        return;
+      }
+      const link = t.closest('a[href]');
+      if (link) {
+        const href = link.getAttribute('href');
+        if (href && href.startsWith('http')) {
+          e.preventDefault();
+          window.aerocord?.shell?.openExternal(href);
+        }
+      }
+    },
+    []
+  );
   const editRef = useRef<HTMLTextAreaElement>(null);
   const internalScrollRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = forwardedScrollRef ?? internalScrollRef;
@@ -571,8 +484,19 @@ export const MessageList: React.FC<MessageListProps> = ({
               </div>
             ) : (
               msg.content && !contentIsOnlyEmbedLink(msg) && (
-                <div className="chat-message-content">
-                  {renderMessageContent(msg.content, onUserClick, msg.mentions, msg.mentionRoles)}
+                <div className="chat-message-content-wrap">
+                  <div
+                    className="chat-message-content chat-message-content-markdown"
+                    onClick={(e) => handleContentClick(e, onUserClick)}
+                    role="textbox"
+                    dangerouslySetInnerHTML={{
+                      __html: contentToMarkdownHtml(msg.content, {
+                        mentions: msg.mentions,
+                        mentionRoles: msg.mentionRoles,
+                        getEmojiImageUrl,
+                      }),
+                    }}
+                  />
                   {msg.edited && <span className="chat-message-edited"> (edited)</span>}
                 </div>
               )

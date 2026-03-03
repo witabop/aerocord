@@ -28,6 +28,7 @@
     "@electron-forge/plugin-fuses": "^7.11.1",
     "@electron-forge/plugin-webpack": "^7.11.1",
     "@electron/fuses": "^1.8.0",
+    "@types/dompurify": "^3.0.5",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@typescript-eslint/eslint-plugin": "^5.62.0",
@@ -44,8 +45,10 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
+    "dompurify": "^3.3.1",
     "dotenv": "^17.3.1",
     "electron-squirrel-startup": "^1.0.1",
+    "marked": "^17.0.3",
     "react": "^19.2.4",
     "react-dom": "^19.2.4"
   }

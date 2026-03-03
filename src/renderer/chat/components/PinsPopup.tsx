@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { assetUrl } from '../../shared/hooks/useAssets';
-import { splitByEmojiCodes, getEmojiFileForCode } from '../../shared/emojiCodes';
+import { getEmojiFileForCode } from '../../shared/emojiCodes';
+import { contentToMarkdownHtml } from '../../shared/markdown';
 import { isGifUrl } from '../../shared/gifUtils';
 import type { MessageVM, EmbedVM } from '../../shared/types';
 import './PinsPopup.css';
@@ -33,56 +34,6 @@ function getEmbedDisplayUrl(embed: EmbedVM): string {
 function formatTime(isoStr: string): string {
   const d = new Date(isoStr);
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
-
-function renderContentWithMentions(
-  content: string,
-  mentions?: { id: string; name: string }[],
-  mentionRoles?: { id: string; name: string }[],
-): React.ReactNode {
-  const userMentions = mentions ?? [];
-  const roleMentions = mentionRoles ?? [];
-  const allMentionNames = [
-    ...userMentions.map(m => `@${m.name}`),
-    ...roleMentions.map(r => `@${r.name}`),
-  ];
-  if (allMentionNames.length === 0) return content;
-  const userMentionMap = new Map(userMentions.map(m => [`@${m.name}`, m.id]));
-  const roleMentionSet = new Set(roleMentions.map(r => `@${r.name}`));
-  const escaped = allMentionNames.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-  const regex = new RegExp(`(${escaped.join('|')})`, 'g');
-  const parts = content.split(regex);
-  return parts.map((part, i) => {
-    if (userMentionMap.get(part)) return <span key={i} className="chat-mention-badge">{part}</span>;
-    if (roleMentionSet.has(part)) return <span key={i} className="chat-mention-badge">{part}</span>;
-    return part;
-  });
-}
-
-function renderMessageContent(
-  content: string,
-  mentions?: { id: string; name: string }[],
-  mentionRoles?: { id: string; name: string }[],
-): React.ReactNode {
-  const segments = splitByEmojiCodes(content);
-  return segments.map((seg, i) => {
-    if (seg.type === 'emoji') {
-      const file = getEmojiFileForCode(seg.value);
-      if (file) {
-        return (
-          <img
-            key={i}
-            className="chat-message-emoji"
-            src={assetUrl('images', 'emoji', file)}
-            alt={seg.value}
-            title={seg.value}
-            draggable={false}
-          />
-        );
-      }
-    }
-    return renderContentWithMentions(seg.value, mentions, mentionRoles);
-  });
 }
 
 export interface PinsPopupProps {
@@ -141,6 +92,25 @@ export const PinsPopup: React.FC<PinsPopupProps> = ({
     [onJumpToMessage, onClose]
   );
 
+  const getEmojiImageUrl = useCallback((code: string) => {
+    const file = getEmojiFileForCode(code);
+    return file ? assetUrl('images', 'emoji', file) : '';
+  }, []);
+
+  const handleContentClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const t = e.target;
+    if (!(t instanceof HTMLElement)) return;
+    const link = t.closest('a[href]');
+    if (link) {
+      const href = link.getAttribute('href');
+      if (href?.startsWith('http')) {
+        e.preventDefault();
+        e.stopPropagation();
+        window.aerocord?.shell?.openExternal(href);
+      }
+    }
+  }, []);
+
   if (!isOpen) return null;
 
   return (
@@ -193,8 +163,19 @@ export const PinsPopup: React.FC<PinsPopupProps> = ({
                   <span className="chat-message-timestamp">({formatTime(msg.timestamp)})</span>
                 </div>
                 {msg.content && (
-                  <div className="chat-message-content">
-                    {renderMessageContent(msg.content, msg.mentions, msg.mentionRoles)}
+                  <div className="chat-message-content-wrap">
+                    <div
+                      className="chat-message-content chat-message-content-markdown"
+                      onClick={handleContentClick}
+                      role="textbox"
+                      dangerouslySetInnerHTML={{
+                        __html: contentToMarkdownHtml(msg.content, {
+                          mentions: msg.mentions,
+                          mentionRoles: msg.mentionRoles,
+                          getEmojiImageUrl,
+                        }),
+                      }}
+                    />
                     {msg.edited && <span className="chat-message-edited"> (edited)</span>}
                   </div>
                 )}

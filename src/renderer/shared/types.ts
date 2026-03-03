@@ -7,6 +7,9 @@ export interface UserVM {
   color?: string;
   roleIcon?: string;
   isSpeaking?: boolean;
+  displayRoleId?: string;
+  displayRoleName?: string;
+  displayRolePermissions?: number;
 }
 
 export interface PresenceVM {
@@ -91,6 +94,7 @@ export interface ChannelVM {
   position?: number;
   parentId?: string | null;
   recipientAccentColor?: string | null;
+  guildMemberCount?: number;
 }
 
 export interface VoiceStateVM {

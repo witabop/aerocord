@@ -1276,6 +1276,33 @@
   min-width: 0;
 }
 
+.member-sidebar-role-group {
+  margin-bottom: 6px;
+}
+
+.member-sidebar-role-group:last-child {
+  margin-bottom: 0;
+}
+
+.member-sidebar-role-header {
+  font-size: 10px;
+  font-weight: 600;
+  color: #4a4a4a;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  padding: 6px 8px 1px;
+}
+
+.member-sidebar-separator {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: cover;
+  margin: 1px 0 3px;
+  padding: 0 4px;
+  box-sizing: border-box;
+}
+
 /* ---- Channel Sidebar (for servers) ---- */
 .chat-sidebar {
   width: 160px;

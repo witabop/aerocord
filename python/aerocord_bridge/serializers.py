@@ -277,6 +277,17 @@ def member_to_vm(client: discord.Client, member: discord.Member) -> dict:
     }
     if role_icon:
         vm["roleIcon"] = role_icon
+
+    try:
+        sorted_roles = sorted(member.roles, key=lambda r: r.position, reverse=True)
+        display_role = next((r for r in sorted_roles if getattr(r, "hoist", False)), None)
+        if display_role is not None:
+            vm["displayRoleId"] = str(display_role.id)
+            vm["displayRoleName"] = display_role.name
+            vm["displayRolePermissions"] = int(getattr(display_role.permissions, "value", 0))
+    except Exception:
+        pass
+
     return vm
 
 
@@ -559,6 +570,9 @@ def channel_to_vm(client: discord.Client, channel: Any) -> dict:
         base["guildName"] = channel.guild.name
         base["position"] = channel.position
         base["parentId"] = str(channel.category_id) if channel.category_id else None
+        approx = getattr(channel.guild, "approximate_member_count", None)
+        cached = getattr(channel.guild, "member_count", 0)
+        base["guildMemberCount"] = approx if approx is not None and approx > 0 else (cached or 0)
         me = getattr(channel.guild, "me", None)
         if me is None and getattr(client, "user", None) is not None:
             me = channel.guild.get_member(client.user.id)

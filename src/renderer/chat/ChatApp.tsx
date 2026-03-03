@@ -1492,6 +1492,7 @@ export const ChatApp: React.FC = () => {
             isLoadingMore={isLoadingMoreMembers}
             isLoadingInitial={isLoadingInitialMembers}
             hasMore={hasMoreMembers}
+            guildMemberCount={channel?.guildMemberCount}
           />
         )}
       </div>

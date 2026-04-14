@@ -31,6 +31,16 @@ class VoiceManager {
     pythonBridge.on('voiceJoined', (data: any) => {
       this._currentChannelId = data?.channelId ?? null;
       this._currentGuildId = data?.guildId ?? null;
+
+      // Race-condition guard: if a callDelete arrived while channel.connect()
+      // was still in flight, callState is already 'idle' by the time
+      // voiceJoined fires.  For DM channels (no guild) this means we're
+      // sitting in a voice channel for a cancelled call — leave immediately
+      // so Discord doesn't re-fire CALL_CREATE and start the loop.
+      if (this._callState === 'idle' && this._currentChannelId && !this._currentGuildId) {
+        console.log('[Voice] Joined DM voice after call was cancelled, leaving immediately');
+        this.leave();
+      }
     });
 
     pythonBridge.on('voiceLeft', () => {
@@ -75,6 +85,10 @@ class VoiceManager {
   }
 
   async startCall(channelId: string): Promise<boolean> {
+    if (this._callState !== 'idle') {
+      console.log(`[Voice] startCall ignored — already in state ${this._callState}`);
+      return false;
+    }
     try {
       this._callState = 'outgoing';
       this._callChannelId = channelId;

@@ -3,7 +3,7 @@ from PyInstaller.utils.hooks import collect_all
 
 datas = []
 binaries = []
-hiddenimports = ['discord', 'discord.ext', 'nacl', 'nacl.bindings', 'opuslib']
+hiddenimports = ['discord', 'discord.ext', 'nacl', 'nacl.bindings', 'opuslib', 'davey']
 tmp_ret = collect_all('discord')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 

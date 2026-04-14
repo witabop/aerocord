@@ -196,16 +196,20 @@ export function registerDiscordEvents(): void {
   pythonBridge.on('callDelete', (data: any) => {
     const { channelId } = data;
     const state = voiceManager.callState;
+    const wasOurCall = voiceManager.callChannelId === channelId;
     console.log(`[Events] callDelete: ch=${channelId} ourState=${state}`);
 
     if (state !== 'idle') {
-      const wasActive = state === 'active';
       voiceManager.setCallState('idle', null);
       broadcastToAll(IPC.CALL_ENDED, { channelId });
+    }
 
-      if (wasActive && voiceManager.currentChannelId === channelId) {
-        voiceManager.leave();
-      }
+    // Tell Python to disconnect if this was our call OR we're already
+    // connected to voice for this channel.  Check callChannelId (not just
+    // currentChannelId) because the voice connection may still be in-flight
+    // — currentChannelId is only set after voiceJoined fires.
+    if (wasOurCall || voiceManager.currentChannelId === channelId) {
+      voiceManager.leave();
     }
   });
 

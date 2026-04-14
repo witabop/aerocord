@@ -19,6 +19,7 @@ from .serializers import (
     _channel_type_str,
     _avatar_url,
 )
+from .voice import voice_bridge
 
 
 def register_events(client: discord.Client, get_self_id: Any) -> None:
@@ -206,6 +207,11 @@ def register_events(client: discord.Client, get_self_id: Any) -> None:
     async def on_call_delete(call: Any) -> None:
         ch_id = str(call.channel.id)
         print(f"[bridge] call_delete: ch={ch_id}", file=sys.stderr)
+        # Force-disconnect voice for this channel BEFORE emitting the event.
+        # Without this, discord.py-self's auto-reconnect (or a still-in-flight
+        # channel.connect()) re-sends a voice-state update, Discord re-creates
+        # the call, and we loop forever.
+        await voice_bridge.cancel_call(client, ch_id)
         await send_event("callDelete", {"channelId": ch_id})
 
     # Raw gateway interception to log CALL events for debugging

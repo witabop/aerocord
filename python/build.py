@@ -36,6 +36,7 @@ def main() -> None:
         "--hidden-import", "nacl",
         "--hidden-import", "nacl.bindings",
         "--hidden-import", "opuslib",
+        "--hidden-import", "davey",
         "--collect-all", "discord",
         entry,
     ]

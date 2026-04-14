@@ -25,6 +25,12 @@ import nacl.bindings
 from discord.gateway import DiscordVoiceWebSocket
 from discord.voice_state import VoiceConnectionState
 
+try:
+    import davey
+    _has_davey = True
+except ImportError:
+    _has_davey = False
+
 from .protocol import send_event, stdout_lock
 
 _opus_loaded = False
@@ -45,7 +51,7 @@ def _ensure_opus() -> None:
             return
     except Exception:
         pass
-    for name in ("opus", "libopus", "libopus-0"):
+    for name in ("opus", "libopus", "libopus-0", "libopus.so.0"):
         try:
             discord.opus.load_opus(name)
             _opus_loaded = True
@@ -89,7 +95,6 @@ class _AudioReceiver:
         self._bridge = bridge
         self._ssrc_to_user: Dict[int, str] = {}
         self._decoders: Dict[int, discord.opus.Decoder] = {}
-        self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._known_peers: set[str] = set()
         self._self_ssrc: Optional[int] = None
         self._is_dm = False
@@ -98,12 +103,7 @@ class _AudioReceiver:
         self._cached_key: Optional[bytes] = None
         self._cached_mode: Optional[str] = None
 
-        # Counters
-        self._pkt_count = 0
-        self._rtp_count = 0
         self._decode_ok = 0
-        self._decrypt_fail = 0
-        self._aead_fail = 0
 
     def set_self_ssrc(self, ssrc: int) -> None:
         self._self_ssrc = ssrc
@@ -155,8 +155,6 @@ class _AudioReceiver:
     # ------------------------------------------------------------------ #
 
     def on_udp_packet(self, data: bytes) -> None:
-        self._pkt_count += 1
-
         if len(data) < 13:
             return
 
@@ -165,7 +163,6 @@ class _AudioReceiver:
         if (b0 >> 6) != 2 or (data[1] & 0x7F) != 0x78:
             return
 
-        self._rtp_count += 1
         ssrc = struct.unpack_from(">I", data, 8)[0]
         user_id = self._resolve_user(ssrc)
         if not user_id:
@@ -193,27 +190,22 @@ class _AudioReceiver:
         try:
             opus_data = self._decrypt_fast(data, b0, key, self._cached_mode or vc.mode)
         except Exception:
-            self._decrypt_fail += 1
-            if self._decrypt_fail <= 5:
-                import traceback as _tb
-                _tb.print_exc(file=sys.stderr)
             return
 
         if opus_data is None:
-            self._decrypt_fail += 1
-            if self._decrypt_fail <= 3:
-                print(f"[voice-rx] Decryption failed ssrc={ssrc} (#{self._decrypt_fail})", file=sys.stderr)
             return
 
-        # Optional DAVE (E2EE) layer
+        # DAVE (E2EE) layer — decrypt if session is active; silently
+        # pass through on failure (happens during key transitions).
         conn_state = getattr(vc, "_connection", None)
         if conn_state:
             ds = getattr(conn_state, "dave_session", None)
-            if ds and getattr(conn_state, "can_encrypt", False):
+            can_enc = getattr(conn_state, "can_encrypt", False)
+            if ds and can_enc and _has_davey:
                 try:
-                    opus_data = ds.decrypt_opus(opus_data)
+                    opus_data = ds.decrypt(int(user_id), davey.MediaType.audio, opus_data)
                 except Exception:
-                    return
+                    pass
 
         if not discord.opus.is_loaded():
             return
@@ -230,8 +222,8 @@ class _AudioReceiver:
         _write_audio_event_sync(user_id, pcm_b64)
 
         self._decode_ok += 1
-        if self._decode_ok <= 3 or self._decode_ok % 500 == 0:
-            print(f"[voice-rx] PCM #{self._decode_ok}: ssrc={ssrc} user={user_id}", file=sys.stderr)
+        if self._decode_ok == 1:
+            print(f"[voice-rx] Receiving audio from user={user_id}", file=sys.stderr)
 
     # ------------------------------------------------------------------ #
 
@@ -419,7 +411,6 @@ class VoiceBridge:
             channel_name = channel_name or "DM Call"
 
             self._audio_receiver = _AudioReceiver(self)
-            self._audio_receiver._loop = asyncio.get_event_loop()
 
             _BridgeVoiceClient._bridge = self
             _BridgeVoiceClient._receiver = self._audio_receiver
@@ -427,9 +418,9 @@ class VoiceBridge:
             is_dm = isinstance(channel, (discord.DMChannel, discord.GroupChannel))
             self._audio_receiver.set_dm_mode(is_dm)
             if is_dm:
-                vc = await channel.connect(cls=_BridgeVoiceClient, ring=ring)
+                vc = await channel.connect(cls=_BridgeVoiceClient, ring=ring, reconnect=False)
             else:
-                vc = await channel.connect(cls=_BridgeVoiceClient)
+                vc = await channel.connect(cls=_BridgeVoiceClient, reconnect=False)
 
             if not vc:
                 return False
@@ -466,8 +457,28 @@ class VoiceBridge:
             traceback.print_exc(file=sys.stderr)
             return False
 
+    async def cancel_call(self, client: discord.Client, channel_id: str) -> None:
+        """Force-disconnect voice for a channel whose call was deleted.
+
+        Called from on_call_delete so that any in-progress channel.connect()
+        is interrupted and discord.py-self stops retrying.
+        """
+        for vc in list(client.voice_clients):
+            if str(vc.channel.id) == channel_id:
+                try:
+                    await vc.disconnect(force=True)
+                except Exception:
+                    pass
+        if self._call_channel_id == channel_id:
+            print(f"[voice] cancel_call: resetting call state for ch={channel_id}", file=sys.stderr)
+            self._call_state = "idle"
+            self._call_channel_id = None
+
     async def start_call(self, client: discord.Client, channel_id: str) -> bool:
         """Start a DM call: connect to voice with ring=True."""
+        if self._call_state != "idle":
+            print(f"[voice] start_call ignored — already in state {self._call_state}", file=sys.stderr)
+            return False
         try:
             channel = client.get_channel(int(channel_id))
             if not channel or not isinstance(channel, (discord.DMChannel, discord.GroupChannel)):
@@ -478,6 +489,13 @@ class VoiceBridge:
             await send_event("callOutgoing", {"channelId": channel_id})
 
             joined = await self.join(client, channel_id, ring=True)
+
+            # on_call_delete may have fired during join(), resetting state
+            if self._call_state == "idle":
+                if joined:
+                    await self.leave()
+                return False
+
             if not joined:
                 self._call_state = "idle"
                 self._call_channel_id = None
@@ -487,23 +505,35 @@ class VoiceBridge:
             return True
         except Exception as e:
             print(f"[voice] Failed to start call: {e}", file=sys.stderr)
-            self._call_state = "idle"
-            self._call_channel_id = None
-            await send_event("callEnded", {"channelId": channel_id})
+            if self._call_state != "idle":
+                self._call_state = "idle"
+                self._call_channel_id = None
+                await send_event("callEnded", {"channelId": channel_id})
             return False
 
     async def accept_call(self, client: discord.Client, channel_id: str) -> bool:
         """Accept an incoming call: connect without ringing."""
         try:
-            joined = await self.join(client, channel_id, ring=False)
-            if not joined:
-                return False
-            self._call_state = "active"
+            self._call_state = "incoming"
             self._call_channel_id = channel_id
+            joined = await self.join(client, channel_id, ring=False)
+
+            # on_call_delete may have fired during join(), resetting state
+            if self._call_state == "idle":
+                if joined:
+                    await self.leave()
+                return False
+
+            if not joined:
+                self._call_channel_id = None
+                return False
+
+            self._call_state = "active"
             await send_event("callActive", {"channelId": channel_id})
             return True
         except Exception as e:
             print(f"[voice] Failed to accept call: {e}", file=sys.stderr)
+            self._call_channel_id = None
             return False
 
     async def decline_call(self, client: discord.Client, channel_id: str) -> None:

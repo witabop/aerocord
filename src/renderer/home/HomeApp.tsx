@@ -16,12 +16,19 @@ import './home.css';
  * When we refetch private channels (e.g. after messageCreate), the API returns Offline
  * for users we just unfriended because Discord stops sending their presence. Merge
  * so we keep the previous non-Offline presence for DMs instead of overwriting with Offline.
+ *
+ * Also preserves conversations from prev that are missing in next. discord.py-self's
+ * internal private_channels cache can drop DM channels after voice disconnects or
+ * call lifecycle events; without this, those conversations silently vanish until a
+ * new message arrives.
  */
 function mergeConversationsPresence(
   prev: HomeListItemVM[],
   next: HomeListItemVM[],
 ): HomeListItemVM[] {
-  return next.map((nextItem) => {
+  const nextIds = new Set(next.map((n) => n.id));
+
+  const merged = next.map((nextItem) => {
     if (!nextItem.recipientId) return nextItem;
     const newStatus = (nextItem.presence?.status ?? '').toString().toLowerCase();
     if (newStatus !== 'offline') return nextItem;
@@ -31,6 +38,14 @@ function mergeConversationsPresence(
     if (prevStatus === 'offline') return nextItem;
     return { ...nextItem, presence: prevItem.presence };
   });
+
+  for (const prevItem of prev) {
+    if (!nextIds.has(prevItem.id)) {
+      merged.push(prevItem);
+    }
+  }
+
+  return merged;
 }
 
 export const HomeApp: React.FC = () => {
@@ -277,6 +292,9 @@ export const HomeApp: React.FC = () => {
   const handleCloseConversation = useCallback(async (channelId: string) => {
     const result = await window.aerocord.channels.closeConversation(channelId);
     if (result.success) {
+      // Remove from state first so mergeConversationsPresence won't re-add it
+      // from prev (the merge now preserves prev items missing in next).
+      setConversations((prev) => prev.filter((c) => c.id !== channelId));
       window.aerocord.contacts.getPrivateChannels().then((channels) =>
         setConversations((prev) => mergeConversationsPresence(prev, channels)),
       );
